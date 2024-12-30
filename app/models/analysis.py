@@ -1,29 +1,29 @@
 from typing import List
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
-class RelevantQuote(BaseModel):
-    text: str
-    context: str = ""
+class ChunkInsight(BaseModel):
+    source: HttpUrl = Field(description="The URL this insight was extracted from")
+    top_keyword: str = Field(description="The most frequently occurring or significant keyword/phrase in the chunk")
+    key_insight: str = Field(description="The most important insight or takeaway from this chunk of text")
+    key_quote: str = Field(description="A verbatim quote from the text that best represents the key insight or pain point")
 
-class Keyword(BaseModel):
-    text: str
-    frequency: int
+    @classmethod
+    def create_empty(cls, source: HttpUrl) -> "ChunkInsight":
+        """Create an empty insight when analysis fails."""
+        return cls(
+            source=source,
+            top_keyword="No content available",
+            key_insight="No content available",
+            key_quote="No content available"
+        )
 
-class PainPoint(BaseModel):
-    description: str
-    evidence: str
-
-class MarketingAngle(BaseModel):
-    title: str
-    description: str
-    target_audience: str
-
-class AnalysisResponse(BaseModel):
-    """Marketing analysis results from content."""
-    quotes: List[RelevantQuote]
-    keywords: List[Keyword]
-    pain_points: List[PainPoint]
-    marketing_angles: List[MarketingAngle]
+class URLAnalysisResult(BaseModel):
+    url: HttpUrl
+    insights: List[ChunkInsight]
 
 class AnalysisRequest(BaseModel):
-    url: HttpUrl 
+    urls: List[HttpUrl] = Field(description="List of URLs to analyze")
+
+class BatchAnalysisResponse(BaseModel):
+    results: List[URLAnalysisResult]
+    failed_urls: List[str] = [] 
