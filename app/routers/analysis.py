@@ -6,7 +6,7 @@ import json
 import asyncio
 from ..models.analysis import AnalysisRequest, BatchAnalysisResponse, URLAnalysisResult
 from ..services.scraper import process_url
-from ..services.analyzer import ContentAnalyzer
+from ..services.analyzer import ContentAnalyzer, ContentChunk
 
 router = APIRouter()
 analyzer = ContentAnalyzer()
@@ -33,7 +33,13 @@ async def analysis_stream(request: AnalysisRequest):
             # Process each chunk and send updates
             for i, chunk in enumerate(chunks, 1):
                 try:
-                    insight = await analyzer.analyze_chunk(chunk.text, i, len(chunks), url)
+                    content_chunk = ContentChunk(
+                        text=chunk.text,
+                        chunk_number=i,
+                        total_chunks=len(chunks),
+                        source_url=str(url)
+                    )
+                    insight = await analyzer.analyze_chunk(content_chunk)
                     if insight:
                         # Convert insight to dict and ensure all HttpUrl objects are strings
                         insight_dict = {

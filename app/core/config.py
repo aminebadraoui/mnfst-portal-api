@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field, computed_field
 from typing import List
+from dotenv import load_dotenv
+import os
+
+# Load the environment variables from .env file
+load_dotenv()
 
 class Settings(BaseSettings):
     # Database settings

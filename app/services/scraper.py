@@ -40,7 +40,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r'[^\w\s.,!?-]', '', text)
     return text.strip()
 
-def chunk_content(content: str, max_chars: int = 2000) -> List[ContentChunk]:
+def chunk_content(content: str, url: str, max_chars: int = 2000) -> List[ContentChunk]:
     """Split content into chunks based on sentences, respecting max character limit."""
     logger.info(f"Original content length: {len(content)}")
     
@@ -57,51 +57,45 @@ def chunk_content(content: str, max_chars: int = 2000) -> List[ContentChunk]:
     for sentence in sentences:
         sentence_length = len(sentence)
         
-        if current_length + sentence_length + 1 <= max_chars:
-            current_chunk.append(sentence)
-            current_length += sentence_length + 1
-        else:
-            if current_chunk:
-                chunk_text = ' '.join(current_chunk)
-                logger.info(f"Creating chunk from sentences: {len(chunk_text)} chars")
-                chunks.append(ContentChunk(
-                    text=chunk_text,
-                    start_index=start_index,
-                    end_index=start_index + len(chunk_text)
-                ))
-                start_index += len(chunk_text) + 1
-                
+        if current_length + sentence_length > max_chars and current_chunk:
+            # Create chunk
+            text = ' '.join(current_chunk)
+            end_index = start_index + len(text)
+            chunks.append(ContentChunk(
+                text=text,
+                start_index=start_index,
+                end_index=end_index,
+                source_url=url
+            ))
+            
+            # Reset for next chunk
+            start_index = end_index + 1
             current_chunk = [sentence]
             current_length = sentence_length
+        else:
+            current_chunk.append(sentence)
+            current_length += sentence_length
     
-    # Add the final chunk if there's anything left
+    # Add the last chunk if there is one
     if current_chunk:
-        chunk_text = ' '.join(current_chunk)
-        logger.info(f"Creating final chunk: {len(chunk_text)} chars")
+        text = ' '.join(current_chunk)
         chunks.append(ContentChunk(
-            text=chunk_text,
+            text=text,
             start_index=start_index,
-            end_index=start_index + len(chunk_text)
+            end_index=start_index + len(text),
+            source_url=url
         ))
     
-    logger.info(f"Total chunks created: {len(chunks)}")
+    logger.info(f"Created {len(chunks)} chunks")
     return chunks
 
 async def process_url(url: str) -> List[ContentChunk]:
     """Process a URL and return chunks of content."""
     try:
-        # Fetch content
         html = await fetch_url_content(url)
-        
-        # Extract content
         content = extract_content(html)
-        
-        # Clean the content
         cleaned_content = clean_text(content)
-        
-        # Split into chunks
-        return chunk_content(cleaned_content)
-        
+        return chunk_content(cleaned_content, url)
     except Exception as e:
         logger.error(f"Error processing URL {url}: {str(e)}")
-        raise 
+        return [] 

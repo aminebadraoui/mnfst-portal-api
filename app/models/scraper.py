@@ -5,4 +5,5 @@ class ContentChunk(BaseModel):
     text: str
     start_index: int = 0
     end_index: int = 0
-    metadata: dict = {} 
+    metadata: dict = {}
+    source_url: str = "" 
