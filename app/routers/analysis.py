@@ -4,12 +4,14 @@ import logging
 from fastapi.responses import StreamingResponse
 import json
 import asyncio
-from ..models.analysis import AnalysisRequest, BatchAnalysisResponse, URLAnalysisResult
+from ..models.analysis import AnalysisRequest, BatchAnalysisResponse, MarketAnalysisInput, MarketAnalysisResponse
 from ..services.scraper import process_url
 from ..services.analyzer import ContentAnalyzer, ContentChunk
+from ..services.market_analyzer import MarketAnalyzer
 
 router = APIRouter()
 analyzer = ContentAnalyzer()
+market_analyzer = MarketAnalyzer()
 logger = logging.getLogger(__name__)
 
 async def analysis_stream(request: AnalysisRequest):
@@ -83,3 +85,20 @@ async def analyze_urls(request: AnalysisRequest):
         analysis_stream(request),
         media_type="text/event-stream"
     ) 
+
+@router.post("/analyze/market-opportunities")
+async def analyze_market_opportunities(data: MarketAnalysisInput) -> MarketAnalysisResponse:
+    """Analyze collected insights to identify market opportunities."""
+    try:
+        opportunities = await market_analyzer.analyze_market(
+            data.keywords,
+            data.insights,
+            data.quotes
+        )
+        return MarketAnalysisResponse(opportunities=opportunities)
+    except Exception as e:
+        logger.error(f"Error in market analysis: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error analyzing market opportunities: {str(e)}"
+        ) 
