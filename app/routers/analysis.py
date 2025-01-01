@@ -9,6 +9,12 @@ from ..services.scraper import process_url
 from ..services.analyzer import ContentAnalyzer, ContentChunk
 from ..services.market_analyzer import MarketAnalyzer
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 router = APIRouter()
 analyzer = ContentAnalyzer()
 market_analyzer = MarketAnalyzer()
@@ -88,17 +94,19 @@ async def analyze_urls(request: AnalysisRequest):
 
 @router.post("/analyze/market-opportunities")
 async def analyze_market_opportunities(data: MarketAnalysisInput) -> MarketAnalysisResponse:
-    """Analyze collected insights to identify market opportunities."""
+    """Analyze content and identify market opportunities."""
+    logger.info("Received request for market opportunities analysis")
+    logger.info(f"Input data: {len(data.keywords)} keywords, {len(data.insights)} insights, {len(data.quotes)} quotes")
+    
     try:
         opportunities = await market_analyzer.analyze_market(
             data.keywords,
             data.insights,
-            data.quotes
+            data.quotes,
+            data.keywords_found
         )
+        logger.info(f"Analysis complete. Found {len(opportunities)} opportunities")
         return MarketAnalysisResponse(opportunities=opportunities)
     except Exception as e:
-        logger.error(f"Error in market analysis: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error analyzing market opportunities: {str(e)}"
-        ) 
+        logger.error(f"Error in market opportunities analysis: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e)) 

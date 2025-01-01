@@ -18,6 +18,7 @@ class MarketAnalysisInput(BaseModel):
     keywords: List[str]
     insights: List[str]
     quotes: List[str]
+    keywords_found: List[str] = []
 
 class MarketOpportunity(BaseModel):
     opportunity: str

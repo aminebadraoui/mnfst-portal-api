@@ -8,7 +8,7 @@ from typing import Optional
 from passlib.context import CryptContext
 
 from .config import settings
-from ..models.db_models import User
+from ..models.user import User
 from .database import get_db
 
 # Password hashing

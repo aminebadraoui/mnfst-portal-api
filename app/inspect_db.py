@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine, inspect
-from core.config import settings
+from app.core.config import settings
 
 def inspect_db():
     # Create engine

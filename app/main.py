@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth, analysis
+from .routers import auth, analysis, research
 
 # Create FastAPI app
 app = FastAPI(
@@ -22,6 +22,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
 app.include_router(analysis.router, prefix=f"{settings.API_V1_STR}/analysis", tags=["Content Analysis"])
+app.include_router(research.router, prefix=f"{settings.API_V1_STR}/research", tags=["Marketing Research"])
 
 # Global exception handler
 @app.exception_handler(Exception)
