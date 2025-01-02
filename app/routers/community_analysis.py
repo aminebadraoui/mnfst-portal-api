@@ -6,7 +6,7 @@ import json
 import logging
 from starlette.responses import Response
 
-from ..models.analysis import (
+from ..models.community_analysis import (
     AnalysisRequest, 
     CommunityInsight,
     CommunityTrendsInput,
@@ -149,12 +149,19 @@ async def analyze_insights(request: Request, analysis_request: AnalysisRequest):
 async def analyze_trends_endpoint(data: CommunityTrendsInput) -> CommunityTrendsResponse:
     """Analyze community content and identify trends."""
     try:
+        logger.info(f"Received trends analysis request with {len(data.insights)} insights, {len(data.quotes)} quotes, and {len(data.keywords_found)} keywords")
+        logger.debug(f"Insights: {data.insights}")
+        logger.debug(f"Quotes: {data.quotes}")
+        logger.debug(f"Keywords: {data.keywords_found}")
+        
         trends = await analyze_trends(
-            data.pain_points,
-            data.insights,
-            data.quotes,
-            data.keywords_found
+            insights=data.insights,
+            quotes=data.quotes,
+            keywords_found=data.keywords_found
         )
+        
+        logger.info(f"Analysis complete, found {len(trends)} trends")
         return CommunityTrendsResponse(trends=trends)
     except Exception as e:
+        logger.error(f"Error in analyze_trends_endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e)) 

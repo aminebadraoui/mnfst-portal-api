@@ -53,6 +53,7 @@ def chunk_content(content: str, url: str, max_chars: int = 2000) -> List[Content
     current_chunk = []
     current_length = 0
     start_index = 0
+    chunk_number = 1
     
     for sentence in sentences:
         sentence_length = len(sentence)
@@ -65,13 +66,16 @@ def chunk_content(content: str, url: str, max_chars: int = 2000) -> List[Content
                 text=text,
                 start_index=start_index,
                 end_index=end_index,
-                source_url=url
+                source_url=url,
+                chunk_number=chunk_number,
+                total_chunks=0  # Will be set after all chunks are created
             ))
             
             # Reset for next chunk
             start_index = end_index + 1
             current_chunk = [sentence]
             current_length = sentence_length
+            chunk_number += 1
         else:
             current_chunk.append(sentence)
             current_length += sentence_length
@@ -83,14 +87,29 @@ def chunk_content(content: str, url: str, max_chars: int = 2000) -> List[Content
             text=text,
             start_index=start_index,
             end_index=start_index + len(text),
-            source_url=url
+            source_url=url,
+            chunk_number=chunk_number,
+            total_chunks=0  # Will be set after all chunks are created
         ))
     
-    logger.info(f"Created {len(chunks)} chunks")
+    # Set total_chunks for all chunks
+    total_chunks = len(chunks)
+    for chunk in chunks:
+        chunk.total_chunks = total_chunks
+    
+    logger.info(f"Created {total_chunks} chunks")
     return chunks
 
-async def process_url(url: str) -> List[ContentChunk]:
-    """Process a URL and return chunks of content."""
+async def scrape_and_chunk_content(url: str) -> List[ContentChunk]:
+    """
+    Scrape content from a URL and split it into analyzable chunks.
+    
+    Args:
+        url: The URL to scrape content from
+        
+    Returns:
+        List of ContentChunk objects containing the processed content
+    """
     try:
         html = await fetch_url_content(url)
         content = extract_content(html)

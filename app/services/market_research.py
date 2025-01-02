@@ -5,14 +5,15 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime
 from uuid import UUID
 
-from ..models.research import (
+from ..models.market_research import (
     MarketingResearch,
-    ContentAnalysis,
+    CommunityAnalysis,
     MarketAnalysis,
     MarketingResearchCreate,
     MarketingResearchUpdate
 )
-from ..models.analysis import ChunkInsight, MarketOpportunity
+from ..models.community_analysis import CommunityInsight as ChunkInsight
+from ..models.market_analysis import MarketOpportunity
 
 class ResearchService:
     def __init__(self, db: AsyncSession):
@@ -36,7 +37,7 @@ class ResearchService:
             MarketingResearch.id == research_id,
             MarketingResearch.user_id == user_id
         ).options(
-            joinedload(MarketingResearch.content_analysis),
+            joinedload(MarketingResearch.community_analysis),
             joinedload(MarketingResearch.market_analysis)
         )
         result = await self.db.execute(query)
@@ -47,7 +48,7 @@ class ResearchService:
         query = select(MarketingResearch).where(
             MarketingResearch.user_id == user_id
         ).options(
-            joinedload(MarketingResearch.content_analysis),
+            joinedload(MarketingResearch.community_analysis),
             joinedload(MarketingResearch.market_analysis)
         ).order_by(MarketingResearch.updated_at.desc())
         result = await self.db.execute(query)
@@ -65,21 +66,21 @@ class ResearchService:
         await self.db.refresh(research)
         return research
 
-    async def save_content_analysis(
+    async def save_community_analysis(
         self, research_id: UUID, user_id: UUID, insights: List[ChunkInsight]
     ) -> Optional[MarketingResearch]:
-        """Save content analysis results."""
+        """Save community analysis results."""
         research = await self.get_research(research_id, user_id)
         if not research:
             return None
 
-        # Create content analysis
-        content_analysis = ContentAnalysis(insights=[insight.model_dump() for insight in insights])
-        self.db.add(content_analysis)
+        # Create community analysis
+        community_analysis = CommunityAnalysis(insights=[insight.model_dump() for insight in insights])
+        self.db.add(community_analysis)
         await self.db.flush()  # Get the ID without committing
 
         # Update research
-        research.content_analysis_id = content_analysis.id
+        research.community_analysis_id = community_analysis.id
         research.updated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(research)
@@ -103,7 +104,7 @@ class ResearchService:
         research.updated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(research)
-        return research 
+        return research
 
     async def delete_research(self, research_id: UUID, user_id: UUID) -> None:
         """Delete a specific research entry."""

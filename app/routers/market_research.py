@@ -1,28 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Union, Dict
-import logging
+from fastapi import APIRouter, HTTPException, Depends, Body
+from typing import List, Dict, Union
 from uuid import UUID
+import logging
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.database import get_db
-from ..core.auth import get_current_user
-from ..models.research import (
-    MarketingResearchCreate,
-    MarketingResearchUpdate,
-    MarketingResearchResponse
-)
-from ..models.analysis import ChunkInsight, MarketOpportunity
-from ..services.research import ResearchService
 from ..models.user import User
+from ..models.market_research import (
+    MarketingResearch, MarketingResearchCreate, MarketingResearchResponse,
+    MarketingResearchUpdate
+)
+from ..models.community_analysis import CommunityInsight as ChunkInsight
+from ..models.market_analysis import MarketOpportunity
+from ..services.market_research import ResearchService
+from ..core.auth import get_current_user
+from ..core.database import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=MarketingResearchResponse)
 async def create_research(
-    research_data: MarketingResearchCreate = Body(default=None),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    research_data: MarketingResearchCreate = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Create a new marketing research."""
     try:
@@ -40,8 +41,8 @@ async def create_research(
 
 @router.get("/", response_model=List[MarketingResearchResponse])
 async def list_research(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """List all research for the current user."""
     try:
@@ -58,8 +59,8 @@ async def list_research(
 @router.get("/{research_id}", response_model=MarketingResearchResponse)
 async def get_research(
     research_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get a specific research by ID."""
     try:
@@ -81,8 +82,8 @@ async def get_research(
 async def update_research_urls(
     research_id: UUID,
     data: Union[List[str], Dict] = Body(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update the URLs of a research."""
     try:
@@ -103,35 +104,35 @@ async def update_research_urls(
             detail=f"Error updating research URLs: {str(e)}"
         )
 
-@router.post("/{research_id}/content-analysis", response_model=MarketingResearchResponse)
-async def save_content_analysis(
+@router.post("/{research_id}/community-analysis", response_model=MarketingResearchResponse)
+async def save_community_analysis(
     research_id: UUID,
     insights: List[ChunkInsight],
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Save content analysis results."""
+    """Save community analysis results."""
     try:
         service = ResearchService(db)
-        research = await service.save_content_analysis(research_id, current_user.id, insights)
+        research = await service.save_community_analysis(research_id, current_user.id, insights)
         if not research:
             raise HTTPException(status_code=404, detail="Research not found")
         return research
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error saving content analysis: {str(e)}")
+        logger.error(f"Error saving community analysis: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error saving content analysis: {str(e)}"
+            detail=f"Error saving community analysis: {str(e)}"
         )
 
 @router.post("/{research_id}/market-analysis", response_model=MarketingResearchResponse)
 async def save_market_analysis(
     research_id: UUID,
     opportunities: List[MarketOpportunity],
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Save market analysis results."""
     try:
@@ -152,8 +153,8 @@ async def save_market_analysis(
 @router.delete("/{research_id}", response_model=dict)
 async def delete_research(
     research_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Delete a specific research entry."""
     try:

@@ -6,7 +6,7 @@ import json
 import logging
 from starlette.responses import Response
 
-from ..models.analysis import (
+from ..models.community_research import (
     AnalysisRequest, 
     CommunityInsight,
     CommunityTrendsInput,

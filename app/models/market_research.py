@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from uuid import uuid4, UUID as UUIDType
 
 from ..core.database import Base
-from .analysis import ChunkInsight, MarketOpportunity
+from .community_analysis import CommunityInsight as ChunkInsight
+from .market_analysis import MarketOpportunity
 
 # SQLAlchemy Models
 class MarketingResearch(Base):
@@ -19,16 +20,16 @@ class MarketingResearch(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     urls = Column(ARRAY(String), default=list)
-    content_analysis_id = Column(UUID, ForeignKey("content_analysis.id"), nullable=True)
+    community_analysis_id = Column(UUID, ForeignKey("community_analysis.id"), nullable=True)
     market_analysis_id = Column(UUID, ForeignKey("market_analysis.id"), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="research")
-    content_analysis = relationship("ContentAnalysis", uselist=False)
+    community_analysis = relationship("CommunityAnalysis", uselist=False)
     market_analysis = relationship("MarketAnalysis", uselist=False)
 
-class ContentAnalysis(Base):
-    __tablename__ = "content_analysis"
+class CommunityAnalysis(Base):
+    __tablename__ = "community_analysis"
 
     id = Column(UUID, primary_key=True, default=uuid4)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -42,7 +43,7 @@ class MarketAnalysis(Base):
     opportunities = Column(JSON)  # Will store List[MarketOpportunity]
 
 # Pydantic Models for API
-class ContentAnalysisModel(BaseModel):
+class CommunityAnalysisModel(BaseModel):
     id: UUIDType
     created_at: datetime
     insights: List[ChunkInsight]
@@ -67,14 +68,14 @@ class MarketingResearchCreate(MarketingResearchBase):
     pass
 
 class MarketingResearchUpdate(MarketingResearchBase):
-    content_analysis_id: Optional[UUIDType] = None
+    community_analysis_id: Optional[UUIDType] = None
     market_analysis_id: Optional[UUIDType] = None
 
 class MarketingResearchResponse(MarketingResearchBase):
     id: UUIDType
     created_at: datetime
     updated_at: datetime
-    content_analysis: Optional[ContentAnalysisModel] = None
+    community_analysis: Optional[CommunityAnalysisModel] = None
     market_analysis: Optional[MarketAnalysisModel] = None
 
     class Config:

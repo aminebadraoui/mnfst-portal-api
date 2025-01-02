@@ -2,7 +2,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth, analysis, research
+from .routers import auth, community_analysis, market_research
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -21,8 +30,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
-app.include_router(analysis.router, prefix=f"{settings.API_V1_STR}/analysis", tags=["Content Analysis"])
-app.include_router(research.router, prefix=f"{settings.API_V1_STR}/research", tags=["Marketing Research"])
+app.include_router(community_analysis.router, prefix=f"{settings.API_V1_STR}/community-analysis", tags=["Community Analysis"])
+app.include_router(market_research.router, prefix=f"{settings.API_V1_STR}/market-research", tags=["Market Research"])
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -39,3 +48,5 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+logger.info("API started and routes configured")
