@@ -14,6 +14,8 @@ class MarketingResearch(Base):
 
     id = Column(UUID, primary_key=True, default=uuid4)
     user_id = Column(UUID, ForeignKey("users.id"))
+    name = Column(String, nullable=False)  # Research name from step 1
+    source = Column(String, nullable=False)  # Selected source from step 2
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     urls = Column(ARRAY(String), default=list)
@@ -57,7 +59,8 @@ class MarketAnalysisModel(BaseModel):
         from_attributes = True
 
 class MarketingResearchBase(BaseModel):
-    keywords: List[str] = []
+    name: str
+    source: str
     urls: List[str] = []
 
 class MarketingResearchCreate(MarketingResearchBase):

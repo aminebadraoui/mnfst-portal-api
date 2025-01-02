@@ -20,17 +20,23 @@ logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=MarketingResearchResponse)
 async def create_research(
+    research_data: MarketingResearchCreate = Body(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create a new marketing research."""
     try:
         service = ResearchService(db)
-        research = await service.create_research(current_user.id)
+        name = research_data.name if research_data else "Untitled Research"
+        source = research_data.source if research_data else "reddit"
+        research = await service.create_research(current_user.id, name=name, source=source)
         return research
     except Exception as e:
         logger.error(f"Error creating research: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 @router.get("/", response_model=List[MarketingResearchResponse])
 async def list_research(

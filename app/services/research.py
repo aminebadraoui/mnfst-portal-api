@@ -18,9 +18,13 @@ class ResearchService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_research(self, user_id: UUID) -> MarketingResearch:
+    async def create_research(self, user_id: UUID, name: str = "Untitled Research", source: str = "reddit") -> MarketingResearch:
         """Create a new empty marketing research."""
-        research = MarketingResearch(user_id=user_id)
+        research = MarketingResearch(
+            user_id=user_id,
+            name=name,
+            source=source
+        )
         self.db.add(research)
         await self.db.commit()
         await self.db.refresh(research)
