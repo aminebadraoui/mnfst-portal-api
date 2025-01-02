@@ -1,167 +1,127 @@
 from fastapi import APIRouter, HTTPException, Request
-from sse_starlette.sse import EventSourceResponse, ServerSentEvent
-from typing import List, AsyncGenerator
-import asyncio
-import json
-import logging
-from starlette.responses import Response
-
+from uuid import UUID
 from ..models.community_analysis import (
-    AnalysisRequest, 
+    AnalysisRequest,
     CommunityInsight,
     CommunityTrendsInput,
     CommunityTrendsResponse
 )
-from ..services.scraper import scrape_and_chunk_content
-from ..agents.insights import ContentChunk, analyze_chunk, analyze_community_content
-from ..agents.trends import analyze_trends
+from ..tasks import analyze_content_task, analyze_market_task
+from ..celery_app import celery_app
+from sse_starlette.sse import EventSourceResponse
+import logging
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
-
-async def event_generator(request: Request, urls: List[str]) -> AsyncGenerator[ServerSentEvent, None]:
-    """Generate events and handle client disconnection."""
-    try:
-        logger.info("Initializing analysis stream")
-        # Send initial status
-        yield ServerSentEvent(
-            data=json.dumps({
-                "type": "status",
-                "message": "Starting community analysis..."
-            })
-        )
-        await asyncio.sleep(0.1)  # Small delay to ensure proper streaming
-
-        # Process each URL
-        for url in urls:
-            if await request.is_disconnected():
-                logger.warning("Client disconnected, stopping stream")
-                break
-
-            logger.info(f"Processing URL: {url}")
-            try:
-                # Get content chunks
-                logger.debug(f"Fetching and chunking content from {url}")
-                chunks = await scrape_and_chunk_content(url)
-                logger.info(f"Got {len(chunks)} chunks from {url}")
-                
-                if not chunks:
-                    error_msg = f"No content found for URL {url}"
-                    logger.warning(error_msg)
-                    yield ServerSentEvent(
-                        data=json.dumps({
-                            "type": "error",
-                            "error": error_msg
-                        })
-                    )
-                    await asyncio.sleep(0.1)
-                    continue
-                
-                # Analyze each chunk
-                for i, chunk in enumerate(chunks, 1):
-                    if await request.is_disconnected():
-                        logger.warning("Client disconnected, stopping stream")
-                        break
-
-                    try:
-                        logger.debug(f"Analyzing chunk {i}/{len(chunks)} from {url}")
-                        logger.debug(f"Chunk content length: {len(chunk.text)}")
-                        insight = await analyze_chunk(chunk)
-                        logger.debug(f"Got insight for chunk {i}: {insight}")
-                        
-                        # Convert insight to dict and ensure all fields are present
-                        insight_dict = {
-                            "source": insight.source,
-                            "pain_point": insight.pain_point,
-                            "key_insight": insight.key_insight,
-                            "supporting_quote": insight.supporting_quote
-                        }
-                        logger.debug(f"Converted insight to dict: {insight_dict}")
-                        
-                        yield ServerSentEvent(
-                            data=json.dumps({
-                                "type": "community_insight",
-                                "data": insight_dict
-                            })
-                        )
-                        await asyncio.sleep(0.1)  # Small delay between chunks
-                        logger.info(f"Successfully sent insight for chunk {i} from {url}")
-                        
-                    except Exception as chunk_error:
-                        error_msg = f"Error analyzing chunk {i}: {str(chunk_error)}"
-                        logger.error(error_msg, exc_info=True)
-                        yield ServerSentEvent(
-                            data=json.dumps({
-                                "type": "error",
-                                "error": error_msg
-                            })
-                        )
-                        await asyncio.sleep(0.1)
-
-            except Exception as url_error:
-                error_msg = f"Error processing URL {url}: {str(url_error)}"
-                logger.error(error_msg, exc_info=True)
-                yield ServerSentEvent(
-                    data=json.dumps({
-                        "type": "error",
-                        "error": error_msg
-                    })
-                )
-                await asyncio.sleep(0.1)
-
-        if not await request.is_disconnected():
-            logger.info("Analysis complete, sending final status")
-            yield ServerSentEvent(
-                data=json.dumps({
-                    "type": "status",
-                    "message": "Analysis complete"
-                })
-            )
-
-    except Exception as e:
-        error_msg = f"Stream error: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        if not await request.is_disconnected():
-            yield ServerSentEvent(
-                data=json.dumps({
-                    "type": "error",
-                    "error": error_msg
-                })
-            )
 
 @router.post("/analyze-insights")
 async def analyze_insights(request: Request, analysis_request: AnalysisRequest):
-    """Analyze community content from URLs and stream insights."""
-    logger.info(f"Starting insights analysis for URLs: {analysis_request.urls}")
-    
-    return EventSourceResponse(
-        event_generator(request, analysis_request.urls),
-        media_type='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'  # Disable buffering in nginx
-        }
-    )
+    """Start background task to analyze community content from URLs."""
+    try:
+        # Log the incoming request
+        logger.info(f"Received analysis request: {analysis_request.dict()}")
+        
+        # Convert research_id to UUID if it's a string
+        research_id = str(UUID(str(analysis_request.research_id)))
+        
+        # Start Celery task
+        task = analyze_content_task.delay(
+            research_id=research_id,
+            urls=analysis_request.urls
+        )
+        
+        task_id = str(task.id)  # Convert UUID to string
+        logger.info(f"Started Celery task {task_id} for research {research_id}")
+        return {"task_id": task_id, "status": "started"}
+        
+    except ValueError as e:
+        logger.error(f"Invalid UUID format: {str(e)}")
+        raise HTTPException(status_code=422, detail="Invalid research ID format")
+    except Exception as e:
+        logger.error(f"Error starting analysis task: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/analyze-trends")
-async def analyze_trends_endpoint(data: CommunityTrendsInput) -> CommunityTrendsResponse:
-    """Analyze community content and identify trends."""
+async def analyze_trends_endpoint(data: CommunityTrendsInput):
+    """Start background task to analyze market trends."""
     try:
-        logger.info(f"Received trends analysis request with {len(data.insights)} insights, {len(data.quotes)} quotes, and {len(data.keywords_found)} keywords")
-        logger.debug(f"Insights: {data.insights}")
-        logger.debug(f"Quotes: {data.quotes}")
-        logger.debug(f"Keywords: {data.keywords_found}")
+        # Convert research_id to UUID if it's a string
+        research_id = str(UUID(str(data.research_id)))
         
-        trends = await analyze_trends(
+        # Start Celery task
+        task = analyze_market_task.delay(
+            research_id=research_id,
             insights=data.insights,
             quotes=data.quotes,
             keywords_found=data.keywords_found
         )
         
-        logger.info(f"Analysis complete, found {len(trends)} trends")
-        return CommunityTrendsResponse(trends=trends)
+        task_id = str(task.id)  # Convert UUID to string
+        logger.info(f"Started Celery task {task_id} for research {research_id}")
+        return {"task_id": task_id, "status": "started"}
+        
+    except ValueError as e:
+        logger.error(f"Invalid UUID format: {str(e)}")
+        raise HTTPException(status_code=422, detail="Invalid research ID format")
     except Exception as e:
-        logger.error(f"Error in analyze_trends_endpoint: {str(e)}", exc_info=True)
+        logger.error(f"Error starting market analysis task: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    """Get the status of a background task."""
+    try:
+        task = celery_app.AsyncResult(task_id)
+        logger.info(f"Checking status for task {task_id}: {task.status}")
+        
+        if task.ready():
+            try:
+                result = task.get()
+                logger.info(f"Task result: {result}")
+                
+                if isinstance(result, dict):
+                    if result.get("status") == "completed":
+                        return {
+                            "status": "completed",
+                            "insights_count": result.get("insights_count", 0),
+                            "data": result.get("data", {})
+                        }
+                    elif result.get("status") == "failed":
+                        return {
+                            "status": "failed",
+                            "error": result.get("error", "Task failed with no error message")
+                        }
+                
+                # If result is not a dict or doesn't have status, treat as success
+                return {
+                    "status": "completed",
+                    "data": result
+                }
+            except Exception as e:
+                logger.error(f"Error getting task result: {str(e)}")
+                return {
+                    "status": "failed",
+                    "error": str(e)
+                }
+        elif task.failed():
+            error = str(task.result) if task.result else "Task failed with no error message"
+            logger.error(f"Task failed: {error}")
+            return {
+                "status": "failed",
+                "error": error
+            }
+        else:
+            # Task is still processing
+            progress = None
+            if hasattr(task, 'info') and task.info:
+                if isinstance(task.info, dict) and 'progress' in task.info:
+                    progress = task.info['progress']
+            
+            return {
+                "status": "processing",
+                "progress": progress,
+                "state": task.state
+            }
+    except Exception as e:
+        logger.error(f"Error getting task status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

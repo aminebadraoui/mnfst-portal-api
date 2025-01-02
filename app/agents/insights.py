@@ -21,6 +21,7 @@ class CommunityAnalysisResult(BaseModel):
     pain_point: str
     key_insight: str
     supporting_quote: str
+    keywords: List[str]
 
 # --- Agent Definition --------------------------------------------------------
 
@@ -32,13 +33,15 @@ agent = Agent(
     1. The most significant pain point or problem that community members are experiencing
     2. A key insight that helps understand the underlying needs or challenges
     3. A relevant verbatim quote that best illustrates the pain point or insight
+    4. Important keywords or phrases that capture the main topics and themes
     
     Focus on identifying real user problems and needs that could inform product development or solutions.
     
     Respond with:
     - Pain Point: [the most significant problem or challenge identified]
     - Key Insight: [an insight that helps understand the underlying need or context]
-    - Supporting Quote: [a relevant verbatim quote from the community]"""
+    - Supporting Quote: [a relevant verbatim quote from the community]
+    - Keywords: [list of 3-5 important keywords or phrases that capture the main topics]"""
 )
 
 # --- Analysis Methods -------------------------------------------------------
@@ -46,6 +49,12 @@ agent = Agent(
 async def analyze_chunk(chunk: ContentChunk) -> CommunityInsight:
     """Analyze a single chunk of community content."""
     try:
+        # Ensure chunk is a ContentChunk instance
+        if isinstance(chunk, str):
+            raise TypeError("Expected ContentChunk object, got string")
+        if not isinstance(chunk, ContentChunk):
+            chunk = ContentChunk(**chunk if isinstance(chunk, dict) else {"text": str(chunk), "source_url": "unknown"})
+            
         logger.info(f"Starting analysis of chunk {chunk.chunk_number} of {chunk.total_chunks} from {chunk.source_url}")
         logger.debug(f"Chunk text length: {len(chunk.text)}")
         logger.debug(f"Chunk range: {chunk.start_index} to {chunk.end_index}")
@@ -71,15 +80,20 @@ async def analyze_chunk(chunk: ContentChunk) -> CommunityInsight:
             source=chunk.source_url,
             pain_point=result.pain_point,
             key_insight=result.key_insight,
-            supporting_quote=result.supporting_quote
+            supporting_quote=result.supporting_quote,
+            keywords=result.keywords
         )
         logger.debug(f"Created CommunityInsight: {insight}")
         return insight
         
     except Exception as e:
         logger.error(f"Error analyzing chunk: {str(e)}", exc_info=True)
+        if isinstance(chunk, (str, bytes)):
+            source = "unknown"
+        else:
+            source = getattr(chunk, 'source_url', 'unknown')
         return CommunityInsight(
-            source=chunk.source_url,
+            source=source,
             pain_point="Error analyzing content",
             key_insight="Error analyzing content",
             supporting_quote="Error analyzing content"

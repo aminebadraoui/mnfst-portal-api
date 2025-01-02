@@ -47,6 +47,16 @@ class CommunityAnalysisModel(BaseModel):
     id: UUIDType
     created_at: datetime
     insights: List[ChunkInsight]
+    keywords: List[str] = []
+
+    @property
+    def all_keywords(self) -> List[str]:
+        """Get all unique keywords from insights."""
+        keywords = []
+        for insight in self.insights:
+            if hasattr(insight, 'keywords'):
+                keywords.extend(insight.keywords)
+        return list(set(keywords))
 
     class Config:
         from_attributes = True
@@ -77,6 +87,22 @@ class MarketingResearchResponse(MarketingResearchBase):
     updated_at: datetime
     community_analysis: Optional[CommunityAnalysisModel] = None
     market_analysis: Optional[MarketAnalysisModel] = None
+
+    @property
+    def has_insights(self) -> bool:
+        """Check if research has insights."""
+        return (
+            self.community_analysis is not None 
+            and self.community_analysis.insights is not None 
+            and len(self.community_analysis.insights) > 0
+        )
+
+    @property
+    def keywords_found(self) -> List[str]:
+        """Get all keywords from community analysis."""
+        if not self.has_insights:
+            return []
+        return self.community_analysis.all_keywords
 
     class Config:
         from_attributes = True 
