@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth, community_analysis, market_research
+from .routers import auth_router
 import logging
 
 # Configure logging
@@ -29,9 +29,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
-app.include_router(community_analysis.router, prefix=f"{settings.API_V1_STR}/community-analysis", tags=["Community Analysis"])
-app.include_router(market_research.router, prefix=f"{settings.API_V1_STR}/market-research", tags=["Market Research"])
+app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
 
 # Global exception handler
 @app.exception_handler(Exception)

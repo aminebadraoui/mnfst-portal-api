@@ -1,12 +1,11 @@
 from sqlalchemy import Column, String, Boolean, DateTime, UUID
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional
 from uuid import uuid4, UUID as UUIDType
 
-from ..core.database import Base
+from .base import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -21,9 +20,6 @@ class User(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
 
-    # Relationships
-    research = relationship("MarketingResearch", back_populates="user")
-
 class UserBase(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
@@ -31,6 +27,9 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+
+class UserUpdate(UserBase):
+    password: Optional[str] = None
 
 class UserResponse(UserBase):
     id: UUIDType
