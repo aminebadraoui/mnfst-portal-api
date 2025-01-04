@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from uuid import uuid4, UUID as UUIDType
+from sqlalchemy.orm import relationship
 
 from .base import Base
 
@@ -17,8 +18,11 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
-    hashed_password = Column(String)
+    hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+
+    # Relationships
+    projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
 
 class UserBase(BaseModel):
     email: EmailStr

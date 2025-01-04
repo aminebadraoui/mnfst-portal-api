@@ -14,40 +14,39 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    POSTGRES_SERVER: str = "localhost"
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_DB: str = "mnfst_portal"
+    DEV_DB_USER: str = Field(default="admin")
+    DEV_DB_PASSWORD: str = Field(default="admin")
+    DEV_DB_NAME: str = Field(default="mnfst_labs_dev")
+    DB_HOST: str = Field(default="localhost")
+    DB_PORT: str = Field(default="5432")
     SQLALCHEMY_DATABASE_URI: Optional[str] = None
     
-    # Redis
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_URL: str = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+    @computed_field
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql+asyncpg://{self.DEV_DB_USER}:{self.DEV_DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DEV_DB_NAME}"
     
     @validator("SQLALCHEMY_DATABASE_URI", pre=True)
     def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
             return v
         return str(PostgresDsn.build(
-            scheme="postgresql",
-            username=values.get("POSTGRES_USER"),
-            password=values.get("POSTGRES_PASSWORD"),
-            host=values.get("POSTGRES_SERVER"),
-            path=f"/{values.get('POSTGRES_DB') or ''}",
+            scheme="postgresql+asyncpg",
+            username=values.get("DEV_DB_USER"),
+            password=values.get("DEV_DB_PASSWORD"),
+            host=values.get("DB_HOST"),
+            path=f"/{values.get('DEV_DB_NAME') or ''}",
         ))
     
-    # Database settings
-    DB_HOST: str = Field(default="localhost")
-    DB_PORT: str = Field(default="5432")
-    DB_NAME: str = Field(default="mnfstportal_db")
-    DB_USER: str = Field(default="postgres")
-    DB_PASS: str = Field(default="")
+    # Redis
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_URL: str = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
     
     # JWT settings
-    JWT_SECRET_KEY: str = Field(default="")
     JWT_ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
+    JWT_SECRET_KEY: str
     
     # API Keys
     OPENAI_API_KEY: str = Field(default="")
@@ -56,12 +55,6 @@ class Settings(BaseSettings):
     
     # CORS settings
     CORS_ORIGINS: str = Field(default="http://localhost:5173,http://localhost:8000")
-    
-    @computed_field
-    @property
-    def DATABASE_URL(self) -> str:
-        """Build the async database URL."""
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     @computed_field
     @property
