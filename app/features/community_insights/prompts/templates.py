@@ -39,11 +39,6 @@ def get_community_insights_prompt(
         "- Unexpected relationships between issues"
     ]
 
-    if source_urls:
-        prompt_parts.append("\nAnalyze these specific discussion URLs:")
-        for url in source_urls:
-            prompt_parts.append(f"- {url}")
-
     prompt_parts.extend([
         "\nFor each insight, provide:",
         "1. A clear title/description",
@@ -56,6 +51,28 @@ def get_community_insights_prompt(
         "\nFocus on counter-intuitive insights that aren't immediately obvious.",
         "Organize findings by engagement level (most discussed/upvoted first).",
     ])
+
+    prompt_parts.extend([
+    "\n4. CUSTOMER AVATAR SYNTHESIS",
+    "Based on the above analysis, construct detailed customer avatars that represent distinct user segments. For each avatar, provide:",
+    "- Demographic indicators found in discussions",
+    "- Primary pain points (with supporting quotes)",
+    "- Typical vocabulary and phrase patterns",
+    "- Common behaviors and usage patterns",
+    "- Decision-making factors",
+    "- Success criteria and definitions",
+    "- Interaction preferences",
+    "- Resource constraints",
+    "- Notable quotes that epitomize this user type",
+    "\nFor each avatar:",
+    "1. Support characteristics with direct evidence from findings",
+    "2. Link to specific discussion threads/comments",
+    "3. Indicate relative size of this segment based on discussion frequency",
+    "4. Highlight unique characteristics that distinguish this avatar",
+    "5. Note any surprising or counter-intuitive traits",
+    "\nFocus on creating distinct, non-overlapping avatars that capture major user segments evident in the discussions.",
+    "Prioritize patterns that appeared consistently across multiple sources."
+])
 
     prompt = "\n".join(prompt_parts)
     logger.debug(f"Generated prompt for topic: {topic_keyword}")

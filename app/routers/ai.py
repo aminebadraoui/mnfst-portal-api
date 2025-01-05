@@ -4,9 +4,25 @@ from ..features.community_insights.implementation.models import (
     CommunityInsightsResponse
 )
 from ..features.community_insights.implementation.service import CommunityInsightsService
+from ..features.community_insights.implementation.query_generator import QueryGenerator
 from typing import Dict, Optional
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/v1")
+
+class QueryGenerationRequest(BaseModel):
+    description: str
+
+@router.post("/ai/generate-query")
+async def generate_query(request: QueryGenerationRequest) -> Dict[str, str]:
+    """
+    Generate a community-focused query based on project description using GPT-4.
+    """
+    try:
+        generator = QueryGenerator()
+        return await generator.generate(request.description)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/community-insights")
 async def generate_community_insights(
