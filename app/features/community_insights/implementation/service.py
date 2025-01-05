@@ -1,5 +1,5 @@
+from typing import Dict, List, Optional, Any
 import logging
-from typing import Optional
 from .models import CommunityInsightsRequest, CommunityInsightsResponse
 from .tasks import process_community_insights
 from fastapi import HTTPException
@@ -42,10 +42,15 @@ class CommunityInsightsService:
             if task.ready():
                 if task.successful():
                     result = task.get()
-                    return CommunityInsightsResponse(
+                    logger.debug(f"Raw response in result: {result.get('raw_perplexity_response', '')[:100]}...")
+                    response = CommunityInsightsResponse(
                         status="completed",
-                        sections=result.get("sections", [])
+                        sections=result.get("sections", []),
+                        avatars=result.get("avatars", []),
+                        raw_perplexity_response=result.get("raw_perplexity_response", "")
                     )
+                    logger.debug(f"Raw response in response: {response.raw_perplexity_response[:100]}...")
+                    return response
                 else:
                     logger.error(f"Task failed: {task.result}")
                     raise HTTPException(status_code=500, detail="Task processing failed")
@@ -55,4 +60,4 @@ class CommunityInsightsService:
                 
         except Exception as e:
             logger.error(f"Error getting task result: {str(e)}", exc_info=True)
-            raise 
+            raise

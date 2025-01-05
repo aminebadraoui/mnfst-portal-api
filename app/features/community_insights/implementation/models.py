@@ -1,26 +1,15 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
 
 class CommunityInsightsRequest(BaseModel):
     topic_keyword: str
-    source_urls: Optional[List[str]] = Field(default_factory=list)
-    product_urls: Optional[List[str]] = Field(default_factory=list)
+    source_urls: List[str]
+    product_urls: List[str]
     use_only_specified_sources: bool = False
 
-class InsightItem(BaseModel):
-    title: str
-    evidence: str
-    source_url: Optional[str] = None
-    engagement_metrics: Optional[str] = None
-    frequency: Optional[str] = None
-    correlation: Optional[str] = None
-    significance: Optional[str] = None
-
-class InsightSection(BaseModel):
-    title: str
-    icon: str
-    insights: List[InsightItem] = Field(default_factory=list)
-
 class CommunityInsightsResponse(BaseModel):
-    status: str = Field(default="completed")
-    sections: List[InsightSection] = Field(default_factory=list) 
+    status: str
+    sections: Optional[List[Dict[str, Any]]] = []
+    avatars: Optional[List[Dict[str, Any]]] = []
+    error: Optional[str] = None
+    raw_perplexity_response: Optional[str] = None 

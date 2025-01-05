@@ -54,6 +54,8 @@ def process_community_insights(
             
             # Convert Pydantic model to dict for serialization
             result = response.model_dump()
+            # Add raw Perplexity response
+            result["raw_perplexity_response"] = content
             logger.info(f"Successfully processed insights with {len(result['sections'])} sections")
             return result
         except Exception as e:
@@ -62,6 +64,8 @@ def process_community_insights(
             return {
                 "status": "error",
                 "sections": [],
+                "avatars": [],
+                "raw_perplexity_response": content,
                 "error": str(e)
             }
         finally:
@@ -74,5 +78,7 @@ def process_community_insights(
         return {
             "status": "error",
             "sections": [],
+            "avatars": [],
+            "raw_perplexity_response": content if 'content' in locals() else "",
             "error": str(e)
         } 

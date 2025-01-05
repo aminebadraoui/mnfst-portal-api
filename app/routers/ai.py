@@ -3,6 +3,12 @@ from ..features.community_insights.implementation.models import (
     CommunityInsightsRequest,
     CommunityInsightsResponse
 )
+from ..features.community_insights.implementation.base_models import (
+    InsightItem,
+    InsightSection,
+    Avatar,
+    AvatarInsight
+)
 from ..features.community_insights.implementation.service import CommunityInsightsService
 from ..features.community_insights.implementation.query_generator import QueryGenerator
 from typing import Dict, Optional
