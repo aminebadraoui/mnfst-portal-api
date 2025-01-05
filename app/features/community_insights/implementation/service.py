@@ -1,112 +1,58 @@
 import logging
-from ..prompts.templates import get_community_insights_prompt
+from typing import Optional
 from .models import CommunityInsightsRequest, CommunityInsightsResponse
+from .tasks import process_community_insights
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
 class CommunityInsightsService:
-    def __init__(self):
-        logger.info("Initializing CommunityInsightsService")
-        pass
-
-    async def generate_insights(self, request: CommunityInsightsRequest) -> CommunityInsightsResponse:
+    async def generate_insights(self, request: CommunityInsightsRequest) -> str:
         """
-        Generate community insights based on the provided request parameters.
+        Start a Celery task to generate and parse community insights.
+        Returns a task ID that can be used to fetch the results.
         """
         try:
-            logger.info(f"Generating insights for topic: {request.topic_keyword}")
-            if request.source_urls:
-                logger.info(f"Source URLs provided: {request.source_urls}")
-            if request.product_urls:
-                logger.info(f"Product URLs provided: {request.product_urls}")
-            logger.info(f"Use only specified sources: {request.use_only_specified_sources}")
+            logger.info(f"Starting insights generation for topic: {request.topic_keyword}")
             
-            # Generate prompt
-            prompt = get_community_insights_prompt(
+            # Start async task for processing
+            task = process_community_insights.delay(
                 topic_keyword=request.topic_keyword,
                 source_urls=request.source_urls,
                 product_urls=request.product_urls,
                 use_only_specified_sources=request.use_only_specified_sources
             )
-            logger.debug(f"Generated prompt: {prompt}")
+            logger.info(f"Started task with ID: {task.id}")
             
-            # For now, return mock data that matches our frontend structure
-            mock_response = {
-                "sections": [
-                    {
-                        "title": "Pain & Frustration Analysis",
-                        "icon": "FaExclamationCircle",
-                        "insights": [
-                            {
-                                "title": "Most emotionally charged complaints",
-                                "evidence": f"Users frequently express frustration about {request.topic_keyword}",
-                                "source": "https://reddit.com/r/example",
-                                "engagement": "150 upvotes / 30 comments",
-                                "frequency": "High frequency in discussions",
-                                "correlation": "Strong correlation with user satisfaction",
-                                "significance": "Indicates key area for improvement",
-                                "keyword": request.topic_keyword
-                            }
-                        ]
-                    },
-                    {
-                        "title": "Question & Advice Mapping",
-                        "icon": "FaQuestionCircle",
-                        "insights": [
-                            {
-                                "title": "Common questions",
-                                "evidence": f"How do I solve this {request.topic_keyword} problem?",
-                                "source": "https://reddit.com/r/example2",
-                                "engagement": "200 upvotes / 45 comments",
-                                "frequency": "Asked weekly",
-                                "correlation": "Related to user experience",
-                                "significance": "Shows need for better documentation",
-                                "keyword": request.topic_keyword
-                            }
-                        ]
-                    },
-                    {
-                        "title": "Pattern Detection",
-                        "icon": "FaChartLine",
-                        "insights": [
-                            {
-                                "title": "Emerging trends",
-                                "evidence": f"Growing discussion about {request.topic_keyword} alternatives",
-                                "source": "https://forum.example.com",
-                                "engagement": "300 upvotes / 75 comments",
-                                "frequency": "Increasing trend",
-                                "correlation": "Linked to market changes",
-                                "significance": "Suggests market evolution",
-                                "keyword": request.topic_keyword
-                            }
-                        ]
-                    },
-                    {
-                        "title": "Main Competitors",
-                        "icon": "FaBuilding",
-                        "insights": [
-                            {
-                                "title": "Market leaders",
-                                "evidence": "Company X leads with 40% market share",
-                                "source": "https://market.example.com",
-                                "engagement": "250 mentions",
-                                "frequency": "Consistently high",
-                                "correlation": "Strong brand recognition",
-                                "significance": "Dominant market position",
-                                "keyword": "market share"
-                            }
-                        ]
-                    }
-                ]
-            }
-            
-            logger.info("Generated mock response successfully")
-            logger.debug(f"Response data: {mock_response}")
-            
-            response = CommunityInsightsResponse(**mock_response)
-            logger.info(f"Successfully created response with {len(response.sections)} sections")
-            return response
+            return task.id
             
         except Exception as e:
-            logger.error(f"Error generating insights: {str(e)}", exc_info=True)
+            logger.error(f"Error starting insights task: {str(e)}", exc_info=True)
+            raise
+
+    async def get_task_result(self, task_id: str) -> CommunityInsightsResponse:
+        """
+        Get the result of a processing task by its ID.
+        Returns a CommunityInsightsResponse with either processing status or completed results.
+        """
+        try:
+            logger.info(f"Fetching result for task: {task_id}")
+            task = process_community_insights.AsyncResult(task_id)
+            
+            if task.ready():
+                if task.successful():
+                    result = task.get()
+                    return CommunityInsightsResponse(
+                        status="completed",
+                        sections=result.get("sections", [])
+                    )
+                else:
+                    logger.error(f"Task failed: {task.result}")
+                    raise HTTPException(status_code=500, detail="Task processing failed")
+            else:
+                logger.info(f"Task {task_id} is still processing")
+                return CommunityInsightsResponse(status="processing")
+                
+        except Exception as e:
+            logger.error(f"Error getting task result: {str(e)}", exc_info=True)
             raise 

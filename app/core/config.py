@@ -62,6 +62,9 @@ class Settings(BaseSettings):
         """Convert CORS_ORIGINS string to list."""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
     
+    # AI settings
+    PERPLEXITY_API_KEY: str = "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"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

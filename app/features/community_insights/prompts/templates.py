@@ -1,52 +1,62 @@
-from typing import List, Optional
-from pydantic import HttpUrl
+from typing import List
 import logging
 
 logger = logging.getLogger(__name__)
 
 def get_community_insights_prompt(
     topic_keyword: str,
-    source_urls: Optional[List[HttpUrl]] = None,
-    product_urls: Optional[List[HttpUrl]] = None,
+    source_urls: List[str] = None,
+    product_urls: List[str] = None,
     use_only_specified_sources: bool = False
 ) -> str:
     """
-    Generate a prompt for the AI model to analyze community insights.
+    Generate a prompt for community insights analysis.
     """
-    logger.info(f"Generating prompt for topic: {topic_keyword}")
-    
-    base_prompt = f"""Analyze community discussions and provide comprehensive insights about {topic_keyword}.
-Focus on identifying:
-1. Pain points and frustrations
-2. Common questions and advice patterns
-3. Emerging trends and patterns
-4. Competitive landscape and market positioning
-
-For each insight, provide:
-- Supporting evidence from discussions
-- Source of information
-- Engagement metrics
-- Frequency of mention
-- Correlation with other topics
-- Business significance
-"""
+    prompt_parts = [
+        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        "\nProvide a comprehensive analysis with the following sections:",
+        "\n1. PAIN & FRUSTRATION ANALYSIS",
+        "- Most emotionally charged complaints",
+        "- Recurring sources of anger",
+        "- Hidden frustrations",
+        "- Indirect expressions of dissatisfaction",
+        "- Cascade effects of problems",
+        "- Time patterns in complaint posting",
+        "\n2. QUESTION & ADVICE MAPPING",
+        "- Most frequently asked questions",
+        "- Most upvoted advice",
+        "- Most debated solutions",
+        "- Most repeated recommendations",
+        "- Success stories with details",
+        "- Failure patterns with context",
+        "\n3. PATTERN DETECTION",
+        "- Unusual word combinations",
+        "- Vocabulary differences between users",
+        "- Shifts in problem descriptions",
+        "- Non-obvious correlations",
+        "- Counter-intuitive success patterns",
+        "- Secondary effects users overlook",
+        "- Unexpected relationships between issues"
+    ]
 
     if source_urls:
-        urls_str = "\n".join([f"- {url}" for url in source_urls])
-        base_prompt += f"\n\nAnalyze the following specific sources:\n{urls_str}"
-        logger.info(f"Added {len(source_urls)} source URLs to prompt")
-    
-    if product_urls:
-        urls_str = "\n".join([f"- {url}" for url in product_urls])
-        base_prompt += f"\n\nInclude analysis of these product pages:\n{urls_str}"
-        logger.info(f"Added {len(product_urls)} product URLs to prompt")
-    
-    if use_only_specified_sources:
-        base_prompt += "\n\nOnly use the specified URLs for analysis. Do not include information from other sources."
-        logger.info("Set to use only specified sources")
-    else:
-        base_prompt += "\n\nIn addition to any specified sources, include relevant insights from other reliable sources."
-        logger.info("Set to include additional sources")
+        prompt_parts.append("\nAnalyze these specific discussion URLs:")
+        for url in source_urls:
+            prompt_parts.append(f"- {url}")
 
-    logger.debug(f"Final prompt: {base_prompt}")
-    return base_prompt 
+    prompt_parts.extend([
+        "\nFor each insight, provide:",
+        "1. A clear title/description",
+        "2. Supporting evidence (direct quotes)",
+        "3. Source URL in plain text",
+        "4. Engagement metrics (upvotes, comments)",
+        "5. Frequency of occurrence",
+        "6. Correlation with other patterns",
+        "7. Significance/implications",
+        "\nFocus on counter-intuitive insights that aren't immediately obvious.",
+        "Organize findings by engagement level (most discussed/upvoted first).",
+    ])
+
+    prompt = "\n".join(prompt_parts)
+    logger.debug(f"Generated prompt for topic: {topic_keyword}")
+    return prompt 
