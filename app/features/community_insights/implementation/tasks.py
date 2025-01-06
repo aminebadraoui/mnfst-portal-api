@@ -1,48 +1,52 @@
-from typing import Dict, Any
-from ....core.celery import celery_app
+import asyncio
+import logging
+from typing import Dict, Any, List
+from ....core.celery import celery_app as celery
 from .task import CommunityInsightsTask
 from .parser import PerplexityParser
 from .repository import TaskRepository
-import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
-@celery_app.task(bind=True, name="process_community_insights")
-def process_community_insights(self,
+@celery.task(bind=True, name="process_community_insights")
+def process_community_insights(
+    self,
     topic_keyword: str,
-    source_urls: list = None,
-    product_urls: list = None,
+    user_query: str,
+    source_urls: List[str] = None,
+    product_urls: List[str] = None,
     use_only_specified_sources: bool = False
 ) -> Dict[str, Any]:
     """
-    Celery task to process community insights.
+    Process community insights for a given topic.
     """
     try:
-        logger.info("Starting community insights processing")
+        # Create task instance
+        task_repository = TaskRepository()
+        task = CommunityInsightsTask(
+            parser=PerplexityParser(),
+            task_repository=task_repository
+        )
+        
+        # Create task in repository first
         task_id = self.request.id
-        logger.info(f"Processing task {task_id}")
+        asyncio.run(task_repository.create_task(task_id))
         
-        # Initialize dependencies
-        parser = PerplexityParser()
-        repository = TaskRepository()
-        task = CommunityInsightsTask(parser=parser, task_repository=repository)
-        
-        # Create task in repository
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(repository.create_task(task_id))
-        
-        # Run the async task in the event loop
-        return loop.run_until_complete(task.process_insights(
+        # Process insights
+        result = asyncio.run(task.process_insights(
             task_id=task_id,
             topic_keyword=topic_keyword,
+            user_query=user_query,
             source_urls=source_urls,
             product_urls=product_urls,
             use_only_specified_sources=use_only_specified_sources
         ))
         
+        return result
+        
     except Exception as e:
-        logger.error(f"Error during processing: {str(e)}", exc_info=True)
+        logger.error(f"Error processing community insights: {str(e)}", exc_info=True)
+        # Return error result instead of raising to avoid task retry
         return {
             "status": "error",
             "sections": [],

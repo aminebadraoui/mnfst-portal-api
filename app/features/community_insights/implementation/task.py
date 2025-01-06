@@ -59,6 +59,7 @@ class CommunityInsightsTask:
         self,
         task_id: str,
         topic_keyword: str,
+        user_query: str,
         source_urls: list = None,
         product_urls: list = None,
         use_only_specified_sources: bool = False
@@ -178,27 +179,27 @@ class CommunityInsightsTask:
                     InsightSection(
                         title=pain_result.title,
                         icon=pain_result.icon,
-                        insights=[insight.dict() for insight in pain_result.insights]
+                        insights=[{**insight.dict(), "query": user_query} for insight in pain_result.insights]
                     ),
                     InsightSection(
                         title=failed_solutions_result.title,
                         icon=failed_solutions_result.icon,
-                        insights=[insight.dict() for insight in failed_solutions_result.insights]
+                        insights=[{**insight.dict(), "query": user_query} for insight in failed_solutions_result.insights]
                     ),
                     InsightSection(
                         title=question_result.title,
                         icon=question_result.icon,
-                        insights=[insight.dict() for insight in question_result.insights]
+                        insights=[{**insight.dict(), "query": user_query} for insight in question_result.insights]
                     ),
                     InsightSection(
                         title=pattern_result.title,
                         icon=pattern_result.icon,
-                        insights=[insight.dict() for insight in pattern_result.insights]
+                        insights=[{**insight.dict(), "query": user_query} for insight in pattern_result.insights]
                     ),
                     InsightSection(
                         title=product_result.title,
                         icon=product_result.icon,
-                        insights=[insight.dict() for insight in product_result.insights]
+                        insights=[{**insight.dict(), "query": user_query} for insight in product_result.insights]
                     )
                 ]
 
@@ -212,6 +213,7 @@ class CommunityInsightsTask:
                                 title=insight.title,
                                 description=insight.description,
                                 evidence=insight.evidence,
+                                query=user_query,
                                 needs=insight.needs,
                                 pain_points=insight.pain_points,
                                 behaviors=insight.behaviors

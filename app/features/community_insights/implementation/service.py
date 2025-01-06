@@ -18,6 +18,7 @@ class CommunityInsightsService:
             # Start async task for processing
             task = process_community_insights.delay(
                 topic_keyword=request.topic_keyword,
+                user_query=request.user_query,
                 source_urls=request.source_urls,
                 product_urls=request.product_urls,
                 use_only_specified_sources=request.use_only_specified_sources

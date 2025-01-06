@@ -3,8 +3,9 @@ from pydantic import BaseModel
 
 class CommunityInsightsRequest(BaseModel):
     topic_keyword: str
-    source_urls: List[str]
-    product_urls: List[str]
+    user_query: str
+    source_urls: Optional[List[str]] = None
+    product_urls: Optional[List[str]] = None
     use_only_specified_sources: bool = False
 
 class CommunityInsightsResponse(BaseModel):

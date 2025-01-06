@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class InsightItem(BaseModel):
     title: str
     evidence: str
+    query: str = ""
     source_url: Optional[str] = None
     engagement_metrics: Optional[str] = None
     frequency: Optional[str] = None
@@ -19,6 +20,7 @@ class AvatarInsight(BaseModel):
     title: str
     description: str
     evidence: str
+    query: str = ""
     needs: List[str]
     pain_points: List[str]
     behaviors: List[str]
@@ -32,6 +34,7 @@ class Avatar(BaseModel):
 class PainInsight(BaseModel):
     title: str
     evidence: str
+    query: str = ""
     source_url: Optional[str] = None
     engagement_metrics: Optional[str] = None
     frequency: Optional[str] = None
@@ -47,6 +50,7 @@ class PainAnalysisResult(BaseModel):
 class QuestionInsight(BaseModel):
     title: str
     evidence: str
+    query: str = ""
     source_url: Optional[str] = None
     engagement_metrics: Optional[str] = None
     frequency: Optional[str] = None
@@ -62,6 +66,7 @@ class QuestionMappingResult(BaseModel):
 class PatternInsight(BaseModel):
     title: str
     evidence: str
+    query: str = ""
     source_url: Optional[str] = None
     engagement_metrics: Optional[str] = None
     frequency: Optional[str] = None
@@ -105,6 +110,7 @@ class ParserResult(BaseModel):
 class ProductInsight(BaseModel):
     title: str
     platform: str
+    query: str = ""
     price_range: Optional[str] = None
     positive_feedback: List[str] = Field(default_factory=list)
     negative_feedback: List[str] = Field(default_factory=list)
@@ -124,6 +130,7 @@ class ProductAnalysisResult(BaseModel):
 class FailedSolutionInsight(BaseModel):
     title: str
     evidence: str
+    query: str = ""
     source_url: Optional[str] = None
     engagement_metrics: Optional[str] = None
     frequency: Optional[str] = None
