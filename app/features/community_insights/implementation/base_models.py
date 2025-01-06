@@ -100,3 +100,37 @@ class ParserResult(BaseModel):
     sections: List[InsightSection] = Field(default_factory=list)
     avatars: List[Avatar] = Field(default_factory=list)
     raw_perplexity_response: str = Field(default="") 
+
+# Product Analysis Models
+class ProductInsight(BaseModel):
+    title: str
+    platform: str
+    price_range: Optional[str] = None
+    positive_feedback: List[str] = Field(default_factory=list)
+    negative_feedback: List[str] = Field(default_factory=list)
+    market_gap: Optional[str] = None
+    source_url: Optional[str] = None
+    engagement_metrics: Optional[str] = None
+    frequency: Optional[str] = None
+    correlation: Optional[str] = None
+    significance: Optional[str] = None
+
+class ProductAnalysisResult(BaseModel):
+    title: str = "Popular Products Analysis"
+    icon: str = "FaShoppingCart"
+    insights: List[ProductInsight] = Field(default_factory=list) 
+
+# Failed Solutions Analysis Models
+class FailedSolutionInsight(BaseModel):
+    title: str
+    evidence: str
+    source_url: Optional[str] = None
+    engagement_metrics: Optional[str] = None
+    frequency: Optional[str] = None
+    correlation: Optional[str] = None
+    significance: Optional[str] = None
+
+class FailedSolutionsResult(BaseModel):
+    title: str = "Failed Solutions Analysis"
+    icon: str = "FaTimesCircle"
+    insights: List[FailedSolutionInsight] = Field(default_factory=list) 

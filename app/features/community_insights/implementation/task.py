@@ -10,7 +10,9 @@ from ..prompts.templates import (
     get_pain_analysis_prompt,
     get_question_mapping_prompt,
     get_pattern_detection_prompt,
-    get_avatars_prompt
+    get_avatars_prompt,
+    get_product_analysis_prompt,
+    get_failed_solutions_prompt
 )
 from ....core.config import settings
 
@@ -37,6 +39,14 @@ class CommunityInsightsTask:
                 base_url="https://api.perplexity.ai"
             )
             self.avatars_client = AsyncOpenAI(
+                api_key=settings.PERPLEXITY_API_KEY,
+                base_url="https://api.perplexity.ai"
+            )
+            self.product_client = AsyncOpenAI(
+                api_key=settings.PERPLEXITY_API_KEY,
+                base_url="https://api.perplexity.ai"
+            )
+            self.failed_solutions_client = AsyncOpenAI(
                 api_key=settings.PERPLEXITY_API_KEY,
                 base_url="https://api.perplexity.ai"
             )
@@ -77,6 +87,23 @@ class CommunityInsightsTask:
                 # Parse pain analysis immediately
                 pain_result = await self.parser.parse_pain_analysis(pain_content, topic_keyword)
                 logger.debug(f"Parsed pain analysis: {pain_result}")
+
+                # Get failed solutions from Perplexity
+                logger.info("Calling Perplexity API for failed solutions")
+                failed_solutions_prompt = get_failed_solutions_prompt(topic_keyword=topic_keyword)
+                failed_solutions_response = await self.failed_solutions_client.chat.completions.create(
+                    model="llama-3.1-sonar-small-128k-online",
+                    messages=[{
+                        "role": "user",
+                        "content": failed_solutions_prompt
+                    }]
+                )
+                failed_solutions_content = failed_solutions_response.choices[0].message.content
+                logger.debug(f"Received failed solutions from Perplexity (first 500 chars): {failed_solutions_content[:500]}")
+                
+                # Parse failed solutions immediately
+                failed_solutions_result = await self.parser.parse_failed_solutions(failed_solutions_content, topic_keyword)
+                logger.debug(f"Parsed failed solutions: {failed_solutions_result}")
 
                 # Get question & advice mapping from Perplexity
                 logger.info("Calling Perplexity API for question mapping")
@@ -129,12 +156,34 @@ class CommunityInsightsTask:
                 avatars_result = await self.parser.parse_avatars(avatars_content, topic_keyword)
                 logger.debug(f"Parsed avatars: {avatars_result}")
 
+                # Get product analysis from Perplexity
+                logger.info("Calling Perplexity API for product analysis")
+                product_prompt = get_product_analysis_prompt(topic_keyword=topic_keyword)
+                product_response = await self.product_client.chat.completions.create(
+                    model="llama-3.1-sonar-small-128k-online",
+                    messages=[{
+                        "role": "user",
+                        "content": product_prompt
+                    }]
+                )
+                product_content = product_response.choices[0].message.content
+                logger.debug(f"Received product analysis from Perplexity (first 500 chars): {product_content[:500]}")
+                
+                # Parse product analysis immediately
+                product_result = await self.parser.parse_product_analysis(product_content, topic_keyword)
+                logger.debug(f"Parsed product analysis: {product_result}")
+
                 # Combine all results
                 sections = [
                     InsightSection(
                         title=pain_result.title,
                         icon=pain_result.icon,
                         insights=[insight.dict() for insight in pain_result.insights]
+                    ),
+                    InsightSection(
+                        title=failed_solutions_result.title,
+                        icon=failed_solutions_result.icon,
+                        insights=[insight.dict() for insight in failed_solutions_result.insights]
                     ),
                     InsightSection(
                         title=question_result.title,
@@ -145,6 +194,11 @@ class CommunityInsightsTask:
                         title=pattern_result.title,
                         icon=pattern_result.icon,
                         insights=[insight.dict() for insight in pattern_result.insights]
+                    ),
+                    InsightSection(
+                        title=product_result.title,
+                        icon=product_result.icon,
+                        insights=[insight.dict() for insight in product_result.insights]
                     )
                 ]
 
@@ -174,11 +228,17 @@ class CommunityInsightsTask:
                     "raw_perplexity_response": f"""Pain Analysis:
 {pain_content}
 
+Failed Solutions:
+{failed_solutions_content}
+
 Question Mapping:
 {question_content}
 
 Pattern Detection:
 {pattern_content}
+
+Product Analysis:
+{product_content}
 
 Avatars:
 {avatars_content}"""

@@ -9,7 +9,7 @@ from .base_models import (
     InsightSection, Avatar, AvatarInsight, InsightItem,
     PainAnalysisResult, QuestionMappingResult, PatternDetectionResult, AvatarsResult,
     PainInsight, QuestionInsight, PatternInsight, AvatarResult, AvatarProfile,
-    ParserResult, ParserInput
+    ParserResult, ParserInput, ProductAnalysisResult, FailedSolutionsResult
 )
 
 logger = logging.getLogger(__name__)
@@ -130,6 +130,66 @@ For each identified avatar:
 - Describe their decision-making process
 
 Focus on creating distinct, non-overlapping avatars that capture major user segments evident in the discussions.""")
+
+            # Agent for parsing product analysis
+            self.product_agent = Agent[None, ProductAnalysisResult](  # type: ignore
+                model=self.model,
+                result_type=ProductAnalysisResult,
+                deps_type=ParserDeps,
+                system_prompt="""You are a product analysis parser focused on popular products and market opportunities.
+Your task is to analyze content and extract insights about products from Amazon, eBay, and Google Shopping.
+
+Focus EXCLUSIVELY on:
+- Most popular products in the category
+- Price ranges and variations
+- Common positive feedback themes
+- Recurring complaints and issues
+- Potential market gaps and opportunities
+- Customer satisfaction patterns
+- Feature comparisons between products
+
+For each product insight, include:
+- Product name and description
+- Platform (Amazon/eBay/Google Shopping)
+- Price range
+- List of positive feedback points
+- List of negative feedback points
+- Identified market gap or opportunity
+- Source URL in plain text
+- Engagement metrics (reviews, ratings)
+- Frequency of mentions
+- Correlation with other products
+- Market significance
+
+Focus on identifying patterns in customer feedback and market opportunities.""")
+
+            # Agent for parsing failed solutions
+            self.failed_solutions_agent = Agent[None, FailedSolutionsResult](  # type: ignore
+                model=self.model,
+                result_type=FailedSolutionsResult,
+                deps_type=ParserDeps,
+                system_prompt="""You are a failed solutions parser focused on identifying unsuccessful attempts and approaches.
+Your task is to analyze content and extract insights about solutions that didn't work.
+
+Focus EXCLUSIVELY on:
+- Most common failed approaches
+- Solutions that made problems worse
+- Abandoned treatment methods
+- Wasted investments
+- Ineffective products or services
+- Misguided advice that backfired
+- Common mistakes and pitfalls
+
+For each failed solution insight, include:
+- A clear title describing what failed
+- Direct quotes as evidence
+- Source URL in plain text
+- Engagement metrics (upvotes, comments)
+- How frequently this failure appears
+- Related patterns or correlations
+- The significance or impact on users
+
+Focus on understanding why these solutions failed and what can be learned.""")
 
             logger.info("Pydantic AI agents initialized with system prompts")
         except Exception as e:
@@ -314,6 +374,98 @@ Return avatars in this format:
         except Exception as e:
             logger.error(f"Error in parse_avatars: {str(e)}", exc_info=True)
             return AvatarsResult()
+
+    async def parse_product_analysis(self, content: str, topic_keyword: str) -> ProductAnalysisResult:
+        """
+        Parse product analysis insights.
+        """
+        try:
+            logger.info("Starting to parse product analysis")
+            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
+
+            result = await self.product_agent.run(
+                f"""Extract product analysis insights from this content:
+
+{content}
+
+Topic: {topic_keyword}
+
+Return insights in this format:
+{{
+  "title": "Popular Products Analysis",
+  "icon": "FaShoppingCart",
+  "insights": [
+    {{
+      "title": "Product name and description",
+      "platform": "Amazon/eBay/Google Shopping",
+      "price_range": "Price range",
+      "positive_feedback": ["List of positive points"],
+      "negative_feedback": ["List of negative points"],
+      "market_gap": "Identified market opportunity",
+      "source_url": "Source URL in plain text",
+      "engagement_metrics": "Reviews, ratings, etc.",
+      "frequency": "How often mentioned",
+      "correlation": "Related products/patterns",
+      "significance": "Market impact"
+    }}
+  ]
+}}""",
+                deps=deps
+            )
+            
+            if result is None or result.data is None:
+                logger.warning("Received None response from product agent")
+                return ProductAnalysisResult()
+                
+            return result.data
+            
+        except Exception as e:
+            logger.error(f"Error in parse_product_analysis: {str(e)}", exc_info=True)
+            return ProductAnalysisResult()
+
+    async def parse_failed_solutions(self, content: str, topic_keyword: str) -> FailedSolutionsResult:
+        """
+        Parse failed solutions insights.
+        """
+        try:
+            logger.info("Starting to parse failed solutions")
+            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
+
+            result = await self.failed_solutions_agent.run(
+                f"""Extract failed solutions insights from this content:
+
+{content}
+
+Topic: {topic_keyword}
+
+Return insights in this format:
+{{
+  "title": "Failed Solutions Analysis",
+  "icon": "FaTimesCircle",
+  "insights": [
+    {{
+      "title": "Clear title of the failed solution",
+      "evidence": "Direct quote from the content",
+      "source_url": "Source URL in plain text",
+      "engagement_metrics": "Upvotes, comments, etc.",
+      "frequency": "How often this appears",
+      "correlation": "Related patterns",
+      "significance": "Impact on users"
+    }}
+  ]
+}}""",
+                deps=deps
+            )
+            
+            if result is None or result.data is None:
+                logger.warning("Received None response from failed solutions agent")
+                return FailedSolutionsResult()
+                
+            return result.data
+            
+        except Exception as e:
+            logger.error(f"Error in parse_failed_solutions: {str(e)}", exc_info=True)
+            return FailedSolutionsResult()
 
     # For backward compatibility
     async def parse_insights(self, pain_content: str, question_content: str, pattern_content: str, topic_keyword: str) -> ParserResult:

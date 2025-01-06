@@ -150,6 +150,86 @@ def get_avatars_prompt(
     logger.debug(f"Generated avatars prompt for topic: {topic_keyword}")
     return prompt
 
+def get_product_analysis_prompt(
+    topic_keyword: str,
+    source_urls: List[str] = None,
+    product_urls: List[str] = None,
+    use_only_specified_sources: bool = False
+) -> str:
+    """
+    Generate a prompt for product analysis.
+    """
+    prompt_parts = [
+        f"Analyze popular products related to the following topic: `{topic_keyword}` . Search across Amazon, eBay, and Google Shopping.",
+        "\nFocus on product analysis. For each platform, analyze:",
+        "- Most popular products in this category",
+        "- Price ranges and variations",
+        "- Common positive feedback themes",
+        "- Recurring complaints and issues",
+        "- Potential market gaps and opportunities",
+        "- Customer satisfaction patterns",
+        "- Feature comparisons between products"
+    ]
+
+    prompt_parts.extend([
+        "\nFor each product insight, provide:",
+        "1. Product name and description",
+        "2. Platform (Amazon/eBay/Google Shopping)",
+        "3. Price range",
+        "4. List of positive feedback points",
+        "5. List of negative feedback points",
+        "6. Identified market gap or opportunity",
+        "7. Source URL in plain text",
+        "8. Engagement metrics (reviews, ratings)",
+        "9. Frequency of mentions",
+        "10. Correlation with other products",
+        "11. Market significance",
+        "\nFocus on identifying patterns in customer feedback and market opportunities.",
+        "Organize findings by popularity and engagement level.",
+    ])
+
+    prompt = "\n".join(prompt_parts)
+    logger.debug(f"Generated product analysis prompt for topic: {topic_keyword}")
+    return prompt
+
+def get_failed_solutions_prompt(
+    topic_keyword: str,
+    source_urls: List[str] = None,
+    product_urls: List[str] = None,
+    use_only_specified_sources: bool = False
+) -> str:
+    """
+    Generate a prompt for failed solutions analysis.
+    """
+    prompt_parts = [
+        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        "\nFocus on failed solutions and attempts. Analyze:",
+        "- Most common failed approaches",
+        "- Solutions that made problems worse",
+        "- Abandoned treatment methods",
+        "- Wasted investments",
+        "- Ineffective products or services",
+        "- Misguided advice that backfired",
+        "- Common mistakes and pitfalls"
+    ]
+
+    prompt_parts.extend([
+        "\nFor each insight, provide:",
+        "1. A clear title describing the failed solution",
+        "2. Direct quotes as evidence",
+        "3. Source URL in plain text",
+        "4. Engagement metrics (upvotes, comments)",
+        "5. How frequently this failure appears",
+        "6. Related patterns or correlations",
+        "7. The significance or impact on users",
+        "\nFocus on understanding why these solutions failed and what can be learned.",
+        "Organize findings by frequency and impact level.",
+    ])
+
+    prompt = "\n".join(prompt_parts)
+    logger.debug(f"Generated failed solutions prompt for topic: {topic_keyword}")
+    return prompt
+
 # For backward compatibility
 def get_insights_prompt(
     topic_keyword: str,
