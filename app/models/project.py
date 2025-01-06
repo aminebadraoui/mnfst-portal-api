@@ -14,4 +14,5 @@ class Project(Base):
     user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
 
     # Relationships
-    user = relationship("User", back_populates="projects") 
+    user = relationship("User", back_populates="projects")
+    community_insight = relationship("CommunityInsight", back_populates="project", uselist=False, cascade="all, delete-orphan") 

@@ -5,14 +5,14 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
-from ..db.session import async_session
+from .database import AsyncSessionLocal
 from ..models.user import User
 from .config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session() as session:
+    async with AsyncSessionLocal() as session:
         try:
             yield session
         finally:

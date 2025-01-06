@@ -23,6 +23,7 @@ class User(Base):
 
     # Relationships
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
+    community_insights = relationship("CommunityInsight", back_populates="user", cascade="all, delete-orphan")
 
 class UserBase(BaseModel):
     email: EmailStr
