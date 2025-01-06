@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth_router, auth, projects, ai
+from .routers import auth_router, auth, projects, ai, community_insights
 import logging
 
 # Configure logging
@@ -33,6 +33,7 @@ app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["Aut
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(projects.router, prefix=settings.API_V1_STR)
 app.include_router(ai.router, tags=["AI"])
+app.include_router(community_insights.router, prefix=settings.API_V1_STR)
 
 # Global exception handler
 @app.exception_handler(Exception)

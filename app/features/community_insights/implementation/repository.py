@@ -170,12 +170,39 @@ class CommunityInsightRepository:
             logger.info(f"Found existing insight for project {project_id}")
             return insight
 
-        # Create new insight if none exists
+        # Create new insight with predefined empty sections
         logger.info(f"Creating new insight for project {project_id}")
+        empty_sections = [
+            {
+                "title": "Pain & Frustration Analysis",
+                "icon": "FaExclamationCircle",
+                "insights": []
+            },
+            {
+                "title": "Failed Solutions Analysis",
+                "icon": "FaTimesCircle",
+                "insights": []
+            },
+            {
+                "title": "Question & Advice Mapping",
+                "icon": "FaQuestionCircle",
+                "insights": []
+            },
+            {
+                "title": "Pattern Detection",
+                "icon": "FaChartLine",
+                "insights": []
+            },
+            {
+                "title": "Popular Products Analysis",
+                "icon": "FaShoppingCart",
+                "insights": []
+            }
+        ]
         insight = CommunityInsight(
             user_id=user_id,
             project_id=project_id,
-            sections=[],
+            sections=empty_sections,
             avatars=[]
         )
         self.session.add(insight)
@@ -192,7 +219,7 @@ class CommunityInsightRepository:
         raw_response: str = None,
         notify: bool = True
     ) -> CommunityInsight:
-        """Append new sections and avatars to existing insight."""
+        """Update sections content and append new avatars to existing insight."""
         stmt = select(CommunityInsight).where(CommunityInsight.project_id == project_id)
         result = await self.session.execute(stmt)
         insight = result.scalar_one_or_none()
@@ -200,15 +227,32 @@ class CommunityInsightRepository:
         if not insight:
             raise ValueError(f"No insight found for project_id: {project_id}")
 
-        # Append new sections if provided
+        # Update sections content if provided
         if new_sections:
-            current_sections = insight.sections or []
-            insight.sections = current_sections + new_sections
+            current_sections = insight.sections
+            # Update each section's insights if new content is provided
+            for current_section in current_sections:
+                for new_section in new_sections:
+                    if current_section["title"] == new_section["title"]:
+                        # Merge existing insights with new ones, avoiding duplicates
+                        existing_insights = current_section.get("insights", [])
+                        new_insights = new_section.get("insights", [])
+                        # Use title and evidence as unique identifiers for insights
+                        existing_keys = {(insight.get("title", ""), insight.get("evidence", "")) 
+                                      for insight in existing_insights}
+                        unique_new_insights = [
+                            insight for insight in new_insights 
+                            if (insight.get("title", ""), insight.get("evidence", "")) not in existing_keys
+                        ]
+                        current_section["insights"] = existing_insights + unique_new_insights
+            insight.sections = current_sections
 
-        # Append new avatars if provided
+        # Append new avatars if provided, avoiding duplicates based on name
         if new_avatars:
             current_avatars = insight.avatars or []
-            insight.avatars = current_avatars + new_avatars
+            existing_names = {avatar["name"] for avatar in current_avatars}
+            unique_new_avatars = [avatar for avatar in new_avatars if avatar["name"] not in existing_names]
+            insight.avatars = current_avatars + unique_new_avatars
 
         # Update other fields if provided
         if error is not None:

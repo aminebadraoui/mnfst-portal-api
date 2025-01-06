@@ -30,7 +30,7 @@ class CommunityInsightsService:
                 )
 
             # Start Celery task
-            process_insights_task.delay(
+            task = process_insights_task.delay(
                 topic_keyword=request.topic_keyword,
                 user_query=request.user_query,
                 user_id=request.user_id,
@@ -42,6 +42,7 @@ class CommunityInsightsService:
 
             return {
                 "status": "processing",
+                "task_id": task.id,
                 "message": "Insights generation started"
             }
         except Exception as e:

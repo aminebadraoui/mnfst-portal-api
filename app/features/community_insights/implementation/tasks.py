@@ -36,24 +36,38 @@ def process_insights_task(
     """
     Celery task to process community insights.
     """
+    logger.info(f"Starting process_insights_task for project {project_id}")
     try:
+        # Update task state to STARTED
+        self.update_state(state='STARTED', meta={'message': 'Task started'})
+        
         task = CommunityInsightsTask()
         # Run the async process_insights in a new event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(task.process_insights(
-            project_id=project_id,
-            user_id=user_id,
-            topic_keyword=topic_keyword,
-            user_query=user_query,
-            source_urls=source_urls,
-            product_urls=product_urls,
-            use_only_specified_sources=use_only_specified_sources
-        ))
-        loop.close()
-        return result
+        try:
+            result = loop.run_until_complete(task.process_insights(
+                project_id=project_id,
+                user_id=user_id,
+                topic_keyword=topic_keyword,
+                user_query=user_query,
+                source_urls=source_urls,
+                product_urls=product_urls,
+                use_only_specified_sources=use_only_specified_sources
+            ))
+            logger.info(f"Task completed successfully for project {project_id}")
+            return {
+                "status": "completed",
+                "sections": result.get("sections", []),
+                "avatars": result.get("avatars", []),
+                "raw_perplexity_response": result.get("raw_perplexity_response")
+            }
+        finally:
+            loop.close()
     except Exception as e:
         logger.error(f"Error in process_insights_task: {str(e)}", exc_info=True)
+        # Update task state to FAILURE
+        self.update_state(state='FAILURE', meta={'error': str(e)})
         raise
 
 class CommunityInsightsTask:
