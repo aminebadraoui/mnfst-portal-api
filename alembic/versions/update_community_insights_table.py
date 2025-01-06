@@ -43,9 +43,11 @@ def upgrade() -> None:
     # Drop the temporary table
     op.execute("DROP TABLE latest_insights")
 
-    # Drop task_id column and add unique constraint to project_id
+    # Drop task_id column
     op.drop_column('community_insights', 'task_id')
-    op.create_unique_constraint('uq_community_insights_project_id', 'community_insights', ['project_id'])
+    
+    # Add query column
+    op.add_column('community_insights', sa.Column('query', sa.String(), nullable=True))
 
     # Update status column default
     op.alter_column('community_insights', 'status',
@@ -53,14 +55,16 @@ def upgrade() -> None:
                     server_default=sa.text("'completed'"),
                     existing_nullable=False)
 
-    # Recreate the user_project index
-    op.create_index('ix_community_insights_user_project', 'community_insights', ['user_id', 'project_id'], unique=True)
+    # Create a composite index on project_id and query
+    op.create_index('ix_community_insights_project_query', 'community_insights', ['project_id', 'query'])
 
 
 def downgrade() -> None:
-    # Drop new unique constraint and index
-    op.drop_index('ix_community_insights_user_project')
-    op.drop_constraint('uq_community_insights_project_id', 'community_insights')
+    # Drop new index
+    op.drop_index('ix_community_insights_project_query')
+    
+    # Drop query column
+    op.drop_column('community_insights', 'query')
 
     # Add back task_id column
     op.add_column('community_insights',

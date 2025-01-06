@@ -8,6 +8,8 @@ from .repository import CommunityInsightRepository
 from sqlalchemy import select
 from ....models.community_insight import CommunityInsight
 from sqlalchemy.orm import Session
+import asyncio
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,8 @@ class CommunityInsightsService:
                 repository = CommunityInsightRepository(session)
                 insight = await repository.get_or_create_insight(
                     user_id=request.user_id,
-                    project_id=request.project_id
+                    project_id=request.project_id,
+                    query=request.user_query
                 )
 
             # Start Celery task
@@ -52,28 +55,68 @@ class CommunityInsightsService:
                 detail=str(e)
             )
 
-    async def get_project_insights(self, project_id: str) -> Optional[Dict[str, Any]]:
+    async def get_project_insights(self, project_id: str, query: str = None) -> Optional[Dict[str, Any]]:
         """
-        Get all insights for a project.
+        Get all insights for a project, optionally filtered by query.
         """
         logger.info(f"Getting insights for project {project_id}")
-        try:
-            # First get the insight without user_id to get the user_id
-            async with AsyncSessionLocal() as session:
-                stmt = select(CommunityInsight).where(CommunityInsight.project_id == project_id)
-                result = await session.execute(stmt)
-                insight = result.scalar_one_or_none()
-                if insight:
-                    return {
-                        "status": "completed",
-                        "sections": insight.sections,
-                        "avatars": insight.avatars,
-                        "raw_perplexity_response": insight.raw_perplexity_response
-                    }
-                return None
-        except Exception as e:
-            logger.error(f"Error getting project insights: {str(e)}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=str(e)
-            )
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with AsyncSessionLocal() as session:
+                    repository = CommunityInsightRepository(session)
+                    insights = await repository.get_project_insights(project_id, query)
+                    
+                    if not insights:
+                        return None
+
+                    if query:
+                        # Return single insight if query is specified
+                        insight = insights[0]
+                        return {
+                            "status": "completed",
+                            "sections": insight.sections if isinstance(insight.sections, list) else json.loads(insight.sections or '[]'),
+                            "avatars": insight.avatars if isinstance(insight.avatars, list) else json.loads(insight.avatars or '[]'),
+                            "raw_perplexity_response": insight.raw_perplexity_response
+                        }
+                    else:
+                        # Return all insights combined if no query specified
+                        combined_sections = []
+                        all_avatars = []
+                        raw_responses = []
+
+                        for insight in insights:
+                            if insight.sections:
+                                sections = insight.sections if isinstance(insight.sections, list) else json.loads(insight.sections or '[]')
+                                combined_sections.extend(sections)
+                            if insight.avatars:
+                                avatars = insight.avatars if isinstance(insight.avatars, list) else json.loads(insight.avatars or '[]')
+                                all_avatars.extend(avatars)
+                            if insight.raw_perplexity_response:
+                                raw_responses.append(insight.raw_perplexity_response)
+
+                        return {
+                            "status": "completed",
+                            "sections": combined_sections,
+                            "avatars": all_avatars,
+                            "raw_perplexity_response": "\n\n".join(raw_responses)
+                        }
+
+            except TimeoutError:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error(f"Max retries reached for project {project_id}", exc_info=True)
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Service temporarily unavailable. Please try again later."
+                    )
+                logger.warning(f"Timeout occurred, retrying ({retry_count}/{max_retries})")
+                await asyncio.sleep(1)  # Wait before retrying
+            except Exception as e:
+                logger.error(f"Error getting project insights: {str(e)}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=str(e)
+                )

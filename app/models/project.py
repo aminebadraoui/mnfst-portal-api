@@ -15,4 +15,4 @@ class Project(Base):
 
     # Relationships
     user = relationship("User", back_populates="projects")
-    community_insight = relationship("CommunityInsight", back_populates="project", uselist=False, cascade="all, delete-orphan") 
+    community_insights = relationship("CommunityInsight", back_populates="project", cascade="all, delete-orphan") 

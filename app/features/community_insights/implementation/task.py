@@ -15,6 +15,7 @@ from ..prompts.templates import (
     get_failed_solutions_prompt
 )
 from ....core.config import settings
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,13 @@ class CommunityInsightsTask:
             # Get or create insight for the project
             insight = await self.task_repository.get_or_create_insight(
                 user_id=user_id,
-                project_id=project_id
+                project_id=project_id,
+                query=user_query
             )
+            
+            # Store task_id for subsequent updates
+            task_id = insight.task_id
+            logger.info(f"Working with task_id: {task_id}")
 
             # Get pain analysis from Perplexity
             logger.info("Calling Perplexity API for pain analysis")
@@ -90,18 +96,25 @@ class CommunityInsightsTask:
             # Parse pain analysis immediately
             pain_result = await self.parser.parse_pain_analysis(pain_content, topic_keyword)
             logger.info("Successfully parsed pain analysis")
-            logger.debug(f"Pain analysis result: {pain_result}")
+            logger.info(f"Pain Analysis Result:\n" + 
+                     f"Title: {pain_result.title}\n" +
+                     f"Icon: {pain_result.icon}\n" +
+                     f"Number of insights: {len(pain_result.insights)}\n" +
+                     f"Insights: {json.dumps([insight.dict() for insight in pain_result.insights], indent=2)}")
             
             # Update DB with pain analysis results
             logger.info("Updating database with pain analysis results")
             try:
+                section_to_update = InsightSection(
+                    title=pain_result.title,
+                    icon=pain_result.icon,
+                    insights=[{**insight.dict(), "query": user_query} for insight in pain_result.insights]
+                ).dict()
+                logger.info(f"Pain analysis section being sent to database: {json.dumps(section_to_update, indent=2)}")
+                
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_sections=[InsightSection(
-                        title=pain_result.title,
-                        icon=pain_result.icon,
-                        insights=[{**insight.dict(), "query": user_query} for insight in pain_result.insights]
-                    ).dict()],
+                    task_id=task_id,
+                    new_sections=[section_to_update],
                     raw_response=f"Pain Analysis:\n{pain_content}"
                 )
                 logger.info("Successfully updated database with pain analysis")
@@ -125,18 +138,25 @@ class CommunityInsightsTask:
             # Parse failed solutions immediately
             failed_solutions_result = await self.parser.parse_failed_solutions(failed_solutions_content, topic_keyword)
             logger.info("Successfully parsed failed solutions")
-            logger.debug(f"Failed solutions result: {failed_solutions_result}")
+            logger.info(f"Failed Solutions Result:\n" + 
+                     f"Title: {failed_solutions_result.title}\n" +
+                     f"Icon: {failed_solutions_result.icon}\n" +
+                     f"Number of insights: {len(failed_solutions_result.insights)}\n" +
+                     f"Insights: {json.dumps([insight.dict() for insight in failed_solutions_result.insights], indent=2)}")
             
             # Update DB with failed solutions results
             logger.info("Updating database with failed solutions results")
             try:
+                section_to_update = InsightSection(
+                    title=failed_solutions_result.title,
+                    icon=failed_solutions_result.icon,
+                    insights=[{**insight.dict(), "query": user_query} for insight in failed_solutions_result.insights]
+                ).dict()
+                logger.info(f"Failed solutions section being sent to database: {json.dumps(section_to_update, indent=2)}")
+                
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_sections=[InsightSection(
-                        title=failed_solutions_result.title,
-                        icon=failed_solutions_result.icon,
-                        insights=[{**insight.dict(), "query": user_query} for insight in failed_solutions_result.insights]
-                    ).dict()],
+                    task_id=task_id,
+                    new_sections=[section_to_update],
                     raw_response=f"Failed Solutions:\n{failed_solutions_content}"
                 )
                 logger.info("Successfully updated database with failed solutions")
@@ -160,18 +180,25 @@ class CommunityInsightsTask:
             # Parse question mapping immediately
             question_result = await self.parser.parse_question_mapping(question_content, topic_keyword)
             logger.info("Successfully parsed question mapping")
-            logger.debug(f"Question mapping result: {question_result}")
+            logger.info(f"Question Mapping Result:\n" + 
+                     f"Title: {question_result.title}\n" +
+                     f"Icon: {question_result.icon}\n" +
+                     f"Number of insights: {len(question_result.insights)}\n" +
+                     f"Insights: {json.dumps([insight.dict() for insight in question_result.insights], indent=2)}")
             
             # Update DB with question mapping results
             logger.info("Updating database with question mapping results")
             try:
+                section_to_update = InsightSection(
+                    title=question_result.title,
+                    icon=question_result.icon,
+                    insights=[{**insight.dict(), "query": user_query} for insight in question_result.insights]
+                ).dict()
+                logger.info(f"Question mapping section being sent to database: {json.dumps(section_to_update, indent=2)}")
+                
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_sections=[InsightSection(
-                        title=question_result.title,
-                        icon=question_result.icon,
-                        insights=[{**insight.dict(), "query": user_query} for insight in question_result.insights]
-                    ).dict()],
+                    task_id=task_id,
+                    new_sections=[section_to_update],
                     raw_response=f"Question Mapping:\n{question_content}"
                 )
                 logger.info("Successfully updated database with question mapping")
@@ -195,18 +222,25 @@ class CommunityInsightsTask:
             # Parse pattern detection immediately
             pattern_result = await self.parser.parse_pattern_detection(pattern_content, topic_keyword)
             logger.info("Successfully parsed pattern detection")
-            logger.debug(f"Pattern detection result: {pattern_result}")
+            logger.info(f"Pattern Detection Result:\n" + 
+                     f"Title: {pattern_result.title}\n" +
+                     f"Icon: {pattern_result.icon}\n" +
+                     f"Number of insights: {len(pattern_result.insights)}\n" +
+                     f"Insights: {json.dumps([insight.dict() for insight in pattern_result.insights], indent=2)}")
             
             # Update DB with pattern detection results
             logger.info("Updating database with pattern detection results")
             try:
+                section_to_update = InsightSection(
+                    title=pattern_result.title,
+                    icon=pattern_result.icon,
+                    insights=[{**insight.dict(), "query": user_query} for insight in pattern_result.insights]
+                ).dict()
+                logger.info(f"Pattern detection section being sent to database: {json.dumps(section_to_update, indent=2)}")
+                
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_sections=[InsightSection(
-                        title=pattern_result.title,
-                        icon=pattern_result.icon,
-                        insights=[{**insight.dict(), "query": user_query} for insight in pattern_result.insights]
-                    ).dict()],
+                    task_id=task_id,
+                    new_sections=[section_to_update],
                     raw_response=f"Pattern Detection:\n{pattern_content}"
                 )
                 logger.info("Successfully updated database with pattern detection")
@@ -230,31 +264,43 @@ class CommunityInsightsTask:
             # Parse avatars immediately
             avatars_result = await self.parser.parse_avatars(avatars_content, topic_keyword)
             logger.info("Successfully parsed avatars")
-            logger.debug(f"Avatars result: {avatars_result}")
+            logger.info(f"Avatars Result:\n" + 
+                     f"Number of avatars: {len(avatars_result.avatars)}\n" +
+                     f"Avatars: {json.dumps([avatar.dict() for avatar in avatars_result.avatars], indent=2)}")
 
             # Update DB with avatars results
             logger.info("Updating database with avatars results")
-            avatars = [
-                Avatar(
-                    name=avatar.name,
-                    type=avatar.type,
-                    insights=[
-                        AvatarInsight(
-                            title=insight.title,
-                            description=insight.description,
-                            evidence=insight.evidence,
-                            query=user_query,
-                            needs=insight.needs,
-                            pain_points=insight.pain_points,
-                            behaviors=insight.behaviors
-                        ) for insight in avatar.insights
-                    ]
-                ) for avatar in avatars_result.avatars
-            ]
             try:
+                # Format avatars data
+                formatted_avatars = []
+                for avatar in avatars_result.avatars:
+                    # Convert avatar to dict and validate
+                    avatar_dict = avatar.dict()
+                    formatted_avatar = {
+                        "name": str(avatar_dict["name"]),
+                        "type": str(avatar_dict["type"]),
+                        "insights": []
+                    }
+                    
+                    # Process each insight
+                    for insight in avatar_dict["insights"]:
+                        formatted_insight = {
+                            "title": str(insight.get("title", "")),
+                            "description": str(insight.get("description", "")),
+                            "evidence": str(insight.get("evidence", "")),
+                            "query": str(user_query),
+                            "needs": list(insight.get("needs", [])) if isinstance(insight.get("needs"), list) else [],
+                            "pain_points": list(insight.get("pain_points", [])) if isinstance(insight.get("pain_points"), list) else [],
+                            "behaviors": list(insight.get("behaviors", [])) if isinstance(insight.get("behaviors"), list) else []
+                        }
+                        formatted_avatar["insights"].append(formatted_insight)
+
+                    formatted_avatars.append(formatted_avatar)
+
+                logger.info(f"Formatted avatars for database: {json.dumps(formatted_avatars, indent=2)}")
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_avatars=[avatar.dict() for avatar in avatars],
+                    task_id=task_id,
+                    new_avatars=formatted_avatars,
                     raw_response=f"Avatars:\n{avatars_content}"
                 )
                 logger.info("Successfully updated database with avatars")
@@ -278,18 +324,25 @@ class CommunityInsightsTask:
             # Parse product analysis immediately
             product_result = await self.parser.parse_product_analysis(product_content, topic_keyword)
             logger.info("Successfully parsed product analysis")
-            logger.debug(f"Product analysis result: {product_result}")
+            logger.info(f"Product Analysis Result:\n" + 
+                     f"Title: {product_result.title}\n" +
+                     f"Icon: {product_result.icon}\n" +
+                     f"Number of insights: {len(product_result.insights)}\n" +
+                     f"Insights: {json.dumps([insight.dict() for insight in product_result.insights], indent=2)}")
             
             # Update DB with product analysis results
             logger.info("Updating database with product analysis results")
             try:
+                section_to_update = InsightSection(
+                    title=product_result.title,
+                    icon=product_result.icon,
+                    insights=[{**insight.dict(), "query": user_query} for insight in product_result.insights]
+                ).dict()
+                logger.info(f"Product analysis section being sent to database: {json.dumps(section_to_update, indent=2)}")
+                
                 await self.task_repository.append_to_insight(
-                    project_id,
-                    new_sections=[InsightSection(
-                        title=product_result.title,
-                        icon=product_result.icon,
-                        insights=[{**insight.dict(), "query": user_query} for insight in product_result.insights]
-                    ).dict()],
+                    task_id=task_id,
+                    new_sections=[section_to_update],
                     raw_response=f"Product Analysis:\n{product_content}"
                 )
                 logger.info("Successfully updated database with product analysis")
@@ -298,9 +351,15 @@ class CommunityInsightsTask:
                 raise
 
             # Return the final insight
-            final_insight = await self.task_repository.get_project_insight(project_id, user_id)
+            logger.info(f"Retrieving final insight for task {task_id}")
+            final_insight = await self.task_repository.get_task_insight(task_id)
+            if not final_insight:
+                logger.error(f"Failed to retrieve final insight for task {task_id}")
+                raise ValueError(f"No insight found for task {task_id}")
+                
             return {
                 "status": "completed",
+                "task_id": task_id,
                 "sections": final_insight.sections,
                 "avatars": final_insight.avatars,
                 "raw_perplexity_response": final_insight.raw_perplexity_response
