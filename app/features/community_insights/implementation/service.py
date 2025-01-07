@@ -55,11 +55,23 @@ class CommunityInsightsService:
                 detail=str(e)
             )
 
+    async def get_project_queries(self, project_id: str) -> List[str]:
+        """Get all available queries for a project's community insights."""
+        logger.info(f"Getting available queries for project {project_id}")
+        try:
+            async with AsyncSessionLocal() as session:
+                repository = CommunityInsightRepository(session)
+                return await repository.get_project_queries(project_id)
+        except Exception as e:
+            logger.error(f"Error getting project queries: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=str(e)
+            )
+
     async def get_project_insights(self, project_id: str, query: str = None) -> Optional[Dict[str, Any]]:
-        """
-        Get all insights for a project, optionally filtered by query.
-        """
-        logger.info(f"Getting insights for project {project_id}")
+        """Get all insights for a project, optionally filtered by query."""
+        logger.info(f"Getting insights for project {project_id}" + (f" with query '{query}'" if query else ""))
         max_retries = 3
         retry_count = 0
         
@@ -72,37 +84,80 @@ class CommunityInsightsService:
                     if not insights:
                         return None
 
-                    if query:
-                        # Return single insight if query is specified
-                        insight = insights[0]
-                        return {
-                            "status": "completed",
-                            "sections": insight.sections if isinstance(insight.sections, list) else json.loads(insight.sections or '[]'),
-                            "avatars": insight.avatars if isinstance(insight.avatars, list) else json.loads(insight.avatars or '[]'),
-                            "raw_perplexity_response": insight.raw_perplexity_response
-                        }
-                    else:
-                        # Return all insights combined if no query specified
-                        combined_sections = []
-                        all_avatars = []
-                        raw_responses = []
+                    # Combine all insights from all queries if no specific query is provided
+                    combined_sections = []
+                    all_avatars = []
+                    raw_responses = []
 
-                        for insight in insights:
-                            if insight.sections:
-                                sections = insight.sections if isinstance(insight.sections, list) else json.loads(insight.sections or '[]')
-                                combined_sections.extend(sections)
-                            if insight.avatars:
-                                avatars = insight.avatars if isinstance(insight.avatars, list) else json.loads(insight.avatars or '[]')
-                                all_avatars.extend(avatars)
-                            if insight.raw_perplexity_response:
-                                raw_responses.append(insight.raw_perplexity_response)
-
-                        return {
-                            "status": "completed",
-                            "sections": combined_sections,
-                            "avatars": all_avatars,
-                            "raw_perplexity_response": "\n\n".join(raw_responses)
+                    # First, initialize the combined sections with the standard structure
+                    section_templates = [
+                        {
+                            "title": "Pain & Frustration Analysis",
+                            "icon": "FaExclamationCircle",
+                            "insights": []
+                        },
+                        {
+                            "title": "Failed Solutions Analysis",
+                            "icon": "FaTimesCircle",
+                            "insights": []
+                        },
+                        {
+                            "title": "Question & Advice Mapping",
+                            "icon": "FaQuestionCircle",
+                            "insights": []
+                        },
+                        {
+                            "title": "Pattern Detection",
+                            "icon": "FaChartLine",
+                            "insights": []
+                        },
+                        {
+                            "title": "Popular Products Analysis",
+                            "icon": "FaShoppingCart",
+                            "insights": []
                         }
+                    ]
+                    combined_sections = section_templates.copy()
+
+                    for insight in insights:
+                        if insight.sections:
+                            sections = insight.sections if isinstance(insight.sections, list) else json.loads(insight.sections or '[]')
+                            # Ensure each section's insights have the query information
+                            for section in sections:
+                                if 'insights' in section:
+                                    for insight_item in section['insights']:
+                                        if 'query' not in insight_item:
+                                            insight_item['query'] = insight.query
+                                    # Find matching section in combined_sections and extend its insights
+                                    matching_section = next(
+                                        (s for s in combined_sections if s['title'] == section['title']),
+                                        None
+                                    )
+                                    if matching_section:
+                                        matching_section['insights'].extend(section['insights'])
+
+                        if insight.avatars:
+                            avatars = insight.avatars if isinstance(insight.avatars, list) else json.loads(insight.avatars or '[]')
+                            # Ensure each avatar's insights have the query information
+                            for avatar in avatars:
+                                if 'insights' in avatar:
+                                    for insight_item in avatar['insights']:
+                                        if 'query' not in insight_item:
+                                            insight_item['query'] = insight.query
+                            all_avatars.extend(avatars)
+
+                        if insight.raw_perplexity_response:
+                            raw_responses.append(insight.raw_perplexity_response)
+
+                    # Filter out sections with no insights
+                    combined_sections = [s for s in combined_sections if s['insights']]
+
+                    return {
+                        "status": "completed",
+                        "sections": combined_sections,
+                        "avatars": all_avatars,
+                        "raw_perplexity_response": "\n\n".join(raw_responses)
+                    }
 
             except TimeoutError:
                 retry_count += 1

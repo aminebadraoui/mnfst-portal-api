@@ -232,7 +232,13 @@ class CommunityInsightRepository:
             # Set a timeout for the database operation
             async with asyncio.timeout(5.0):  # 5 second timeout
                 result = await self.session.execute(stmt)
-                return result.scalars().all()
+                insights = result.scalars().all()
+                
+                # Log the number of insights found
+                logger.info(f"Found {len(insights)} insights for project {project_id}" + 
+                          (f" with query '{query}'" if query else ""))
+                
+                return insights
         except asyncio.TimeoutError as e:
             logger.error(f"Timeout getting insights for project {project_id}", exc_info=True)
             raise TimeoutError("Database operation timed out") from e
@@ -427,4 +433,18 @@ class CommunityInsightRepository:
             return insight
         except Exception as e:
             logger.error(f"Error getting insight for task {task_id}: {str(e)}", exc_info=True)
+            raise 
+
+    async def get_project_queries(self, project_id: str) -> List[str]:
+        """Get all unique queries for a project's community insights."""
+        try:
+            stmt = select(CommunityInsight.query).distinct().where(
+                CommunityInsight.project_id == project_id,
+                CommunityInsight.query.isnot(None)
+            )
+            result = await self.session.execute(stmt)
+            queries = result.scalars().all()
+            return [query for query in queries if query]  # Filter out None values
+        except Exception as e:
+            logger.error(f"Error getting project queries: {str(e)}", exc_info=True)
             raise 

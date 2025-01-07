@@ -1,5 +1,5 @@
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sse_starlette.sse import EventSourceResponse
 from ..features.community_insights.implementation.models import CommunityInsightsResponse, CommunityInsightsRequest
 from ..features.community_insights.implementation.service import CommunityInsightsService
@@ -112,4 +112,27 @@ async def stream_project_insights(
         raise HTTPException(
             status_code=500,
             detail=str(e)
-        ) 
+        )
+
+@router.get("/{project_id}/community-insights/queries")
+async def get_project_queries(
+    project_id: str,
+    db: Session = Depends(get_db)
+) -> List[str]:
+    """Get all available queries for a project's community insights."""
+    service = CommunityInsightsService(db)
+    queries = await service.get_project_queries(project_id)
+    return queries
+
+@router.get("/{project_id}/community-insights")
+async def get_project_insights(
+    project_id: str,
+    query: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get community insights for a project, optionally filtered by query."""
+    service = CommunityInsightsService(db)
+    insights = await service.get_project_insights(project_id, query)
+    if not insights:
+        raise HTTPException(status_code=404, detail="No community insights found")
+    return insights 
