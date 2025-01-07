@@ -64,7 +64,8 @@ class CommunityInsightsTask:
         user_query: str,
         source_urls: list = None,
         product_urls: list = None,
-        use_only_specified_sources: bool = False
+        use_only_specified_sources: bool = False,
+        task_id: str = None
     ) -> Dict[str, Any]:
         """Process insights for a project."""
         logger.info(f"Processing insights for project {project_id}")
@@ -73,7 +74,8 @@ class CommunityInsightsTask:
             insight = await self.task_repository.get_or_create_insight(
                 user_id=user_id,
                 project_id=project_id,
-                query=user_query
+                query=user_query,
+                task_id=task_id
             )
             
             # Store task_id for subsequent updates

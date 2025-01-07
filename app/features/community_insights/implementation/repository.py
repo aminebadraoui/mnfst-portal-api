@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_, distinct
 from sqlalchemy.orm import selectinload
 import asyncpg
 import logging
@@ -16,8 +16,10 @@ from ....models.project import Project
 logger = logging.getLogger(__name__)
 
 class TaskRepository:
-    def __init__(self):
-        self.notification_conn: Optional[asyncpg.Connection] = None
+    def __init__(self, session: Optional[AsyncSession] = None):
+        """Initialize the repository with an optional session."""
+        self.session = session
+        self.notification_conn = None
 
     async def __aenter__(self):
         return self
@@ -61,11 +63,19 @@ class TaskRepository:
             await session.commit()
             logger.info(f"Successfully created task {task_id}")
 
-            # Try to initialize notifications, but don't let it block task creation
+            # Try to initialize notifications and send task creation notification
             try:
                 await self.init_notifications()
+                if self.notification_conn:
+                    await notify_insight_update(
+                        self.notification_conn,
+                        task_id=task_id,
+                        project_id=project_id,
+                        status="processing"
+                    )
+                    logger.info(f"Sent task creation notification for task {task_id}")
             except Exception as e:
-                logger.warning(f"Failed to initialize notifications during task creation: {str(e)}")
+                logger.warning(f"Failed to send task creation notification: {str(e)}")
                 # Continue without notifications
         except Exception as e:
             logger.error(f"Failed to create task {task_id}: {str(e)}", exc_info=True)
@@ -133,6 +143,42 @@ class TaskRepository:
             await self.session.rollback()
             raise
 
+    async def update_task_status(self, task_id: str, status: str) -> None:
+        """Update the status of a task."""
+        logger.info(f"Updating status to {status} for task {task_id}")
+        try:
+            stmt = select(CommunityInsight).where(CommunityInsight.task_id == task_id)
+            result = await self.session.execute(stmt)
+            insight = result.scalar_one_or_none()
+            
+            if not insight:
+                logger.error(f"No insight found for task_id: {task_id}")
+                raise ValueError(f"No insight found for task_id: {task_id}")
+            
+            insight.status = status
+            await self.session.commit()
+            logger.info(f"Successfully updated status to {status} for task {task_id}")
+
+            # Send notification about task completion
+            try:
+                await self.init_notifications()
+                if self.notification_conn and status == "completed":
+                    await notify_insight_update(
+                        self.notification_conn,
+                        task_id=task_id,
+                        project_id=insight.project_id,
+                        status=status
+                    )
+                    logger.info(f"Sent completion notification for task {task_id}")
+            except Exception as notify_error:
+                logger.error(f"Failed to send completion notification: {str(notify_error)}", exc_info=True)
+                # Don't raise the error since the status update was successful
+
+        except Exception as e:
+            logger.error(f"Error updating task status: {str(e)}", exc_info=True)
+            await self.session.rollback()
+            raise
+
     async def cleanup(self):
         """Cleanup resources."""
         if self.notification_conn:
@@ -159,6 +205,7 @@ class CommunityInsightRepository:
         user_id: str,
         project_id: str,
         query: str = None,
+        task_id: str = None
     ) -> CommunityInsight:
         """Get existing insight for project and query or create a new one."""
         # Try to get existing insight for this project and query
@@ -173,6 +220,7 @@ class CommunityInsightRepository:
             logger.info(f"Found existing insight for project {project_id} and query {query}")
             # Set status back to processing for new task
             insight.status = "processing"
+            insight.task_id = task_id  # Update task_id for existing insight
             await self.session.commit()
             return insight
 
@@ -209,6 +257,7 @@ class CommunityInsightRepository:
             user_id=user_id,
             project_id=project_id,
             query=query,
+            task_id=task_id,  # Set task_id for new insight
             sections=empty_sections,
             avatars=[],
             status="processing"  # Set initial status to processing
@@ -254,101 +303,81 @@ class CommunityInsightRepository:
         raw_response: str = None,
         error: str = None
     ) -> None:
-        """Append new sections or avatars to an insight."""
+        """Append new sections and avatars to an existing insight."""
         logger.info(f"Appending to insight for task {task_id}")
         try:
+            # Get the insight first
             stmt = select(CommunityInsight).where(CommunityInsight.task_id == task_id)
             result = await self.session.execute(stmt)
             insight = result.scalar_one_or_none()
-
+            
             if not insight:
                 logger.error(f"No insight found for task_id: {task_id}")
                 raise ValueError(f"No insight found for task_id: {task_id}")
+            
+            if not isinstance(insight, CommunityInsight):
+                logger.error(f"Invalid insight type for task_id {task_id}: {type(insight)}")
+                raise ValueError(f"Invalid insight type: {type(insight)}")
 
-            if new_sections:
-                logger.info(f"Updating sections for task {task_id}")
+            # Process sections if provided
+            if new_sections is not None:
                 try:
                     current_sections = insight.sections or []
                     logger.info(f"Current sections loaded: {json.dumps(current_sections, indent=2)}")
-                except Exception as e:
-                    logger.warning(f"Failed to parse current sections, starting fresh: {str(e)}")
-                    current_sections = []
-
-                # For each new section
-                for new_section in new_sections:
-                    # Handle case where new_section might be a string
-                    if isinstance(new_section, str):
-                        logger.warning(f"Received string section instead of dict: {new_section}")
-                        continue
-                        
-                    # Find matching section by title
-                    matching_section = next(
-                        (section for section in current_sections 
-                         if section["title"] == new_section["title"]),
-                        None
-                    )
                     
-                    if matching_section:
-                        # Update existing section with new insights
-                        logger.info(f"Updating existing section: {new_section['title']}")
-                        matching_section["insights"] = new_section["insights"]
-                        logger.info(f"Updated insights count: {len(new_section['insights'])}")
-                    else:
-                        # Add new section if no match found
-                        logger.info(f"Adding new section: {new_section['title']}")
-                        current_sections.append(new_section)
+                    # For each new section
+                    for new_section in new_sections:
+                        # Handle case where new_section might be a string
+                        if isinstance(new_section, str):
+                            logger.warning(f"Received string section instead of dict: {new_section}")
+                            continue
+                            
+                        # Find matching section by title
+                        matching_section = next(
+                            (section for section in current_sections 
+                             if section["title"] == new_section["title"]),
+                            None
+                        )
+                        
+                        if matching_section:
+                            # Update existing section with new insights
+                            logger.info(f"Updating existing section: {new_section['title']}")
+                            matching_section["insights"] = new_section["insights"]
+                            logger.info(f"Updated insights count: {len(new_section['insights'])}")
+                        else:
+                            # Add new section if no match found
+                            logger.info(f"Adding new section: {new_section['title']}")
+                            current_sections.append(new_section)
+                    
+                    insight.sections = current_sections
+                except Exception as e:
+                    logger.error(f"Error processing sections: {str(e)}", exc_info=True)
+                    raise
 
-                insight.sections = current_sections
-
-            if new_avatars:
-                logger.info(f"Updating avatars for task {task_id}")
+            # Process avatars if provided
+            if new_avatars is not None:
                 try:
-                    # Ensure new_avatars is a list
-                    if not isinstance(new_avatars, list):
-                        logger.warning(f"new_avatars is not a list, converting: {type(new_avatars)}")
-                        new_avatars = [new_avatars] if new_avatars else []
-
-                    # Validate and clean avatar data
                     validated_avatars = []
                     for avatar in new_avatars:
                         try:
-                            # Convert string to dict if needed
-                            if isinstance(avatar, str):
-                                avatar = json.loads(avatar)
-                            
+                            # Validate avatar structure
                             if not isinstance(avatar, dict):
-                                logger.warning(f"Invalid avatar format, skipping: {avatar}")
+                                logger.warning(f"Invalid avatar type: {type(avatar)}")
                                 continue
                                 
-                            if not all(key in avatar for key in ["name", "type", "insights"]):
-                                logger.warning(f"Avatar missing required fields, skipping: {avatar}")
+                            if "insights" not in avatar:
+                                logger.warning(f"Avatar missing insights: {avatar}")
                                 continue
                                 
-                            # Ensure insights is a list
-                            if not isinstance(avatar["insights"], list):
-                                logger.warning(f"Avatar insights is not a list, skipping: {avatar}")
-                                continue
-                                
-                            # Clean and validate each insight
+                            # Clean and validate insights
                             cleaned_insights = []
-                            for insight in avatar["insights"]:
-                                if not isinstance(insight, dict):
-                                    try:
-                                        insight = json.loads(insight) if isinstance(insight, str) else {}
-                                    except:
-                                        continue
-                                        
-                                cleaned_insight = {
-                                    "title": str(insight.get("title", "")),
-                                    "description": str(insight.get("description", "")),
-                                    "evidence": str(insight.get("evidence", "")),
-                                    "query": str(insight.get("query", "")),
-                                    "needs": insight.get("needs", []) if isinstance(insight.get("needs"), list) else [],
-                                    "pain_points": insight.get("pain_points", []) if isinstance(insight.get("pain_points"), list) else [],
-                                    "behaviors": insight.get("behaviors", []) if isinstance(insight.get("behaviors"), list) else []
-                                }
-                                cleaned_insights.append(cleaned_insight)
-                                
+                            for insight_item in avatar["insights"]:
+                                if isinstance(insight_item, dict) and "text" in insight_item:
+                                    cleaned_insights.append({
+                                        "text": str(insight_item["text"]),
+                                        "type": str(insight_item.get("type", "general"))
+                                    })
+                                    
                             cleaned_avatar = {
                                 "name": str(avatar["name"]),
                                 "type": str(avatar["type"]),
@@ -362,7 +391,6 @@ class CommunityInsightRepository:
 
                     insight.avatars = validated_avatars
                     logger.info(f"Successfully updated avatars: {len(validated_avatars)} avatars")
-                    logger.debug(f"Validated avatars: {json.dumps(validated_avatars, indent=2)}")
                 except Exception as e:
                     logger.error(f"Error processing avatars: {str(e)}", exc_info=True)
                     raise
@@ -375,10 +403,8 @@ class CommunityInsightRepository:
 
             if error:
                 insight.error = error
-
-            # Update status to completed
-            insight.status = "completed"
-            logger.info(f"Updated status to completed for task {task_id}")
+                insight.status = "error"
+                logger.info(f"Updated status to error for task {task_id}")
 
             await self.session.commit()
             
@@ -391,6 +417,7 @@ class CommunityInsightRepository:
                 raise ValueError("Failed to verify save - insight not found after commit")
                 
             logger.info(f"Successfully saved insight with {len(saved_insight.sections)} sections and {len(saved_insight.avatars)} avatars")
+            logger.info(f"Current status: {saved_insight.status}")
 
         except Exception as e:
             logger.error(f"Failed to append to insight: {str(e)}", exc_info=True)
@@ -411,11 +438,32 @@ class CommunityInsightRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_project_queries(self, project_id: str) -> List[str]:
+        """Get all unique queries for a project's community insights."""
+        logger.info(f"Getting unique queries for project {project_id}")
+        try:
+            # Query to select distinct queries for a project
+            stmt = select(distinct(CommunityInsight.query)).where(
+                and_(
+                    CommunityInsight.project_id == project_id,
+                    CommunityInsight.query.isnot(None),
+                    CommunityInsight.status == "completed"
+                )
+            )
+            result = await self.session.execute(stmt)
+            queries = [row[0] for row in result if row[0]]  # Filter out None values
+            
+            logger.info(f"Found {len(queries)} unique queries for project {project_id}")
+            return queries
+        except Exception as e:
+            logger.error(f"Error getting project queries: {str(e)}", exc_info=True)
+            raise
+
     async def cleanup(self):
         """Cleanup resources."""
         if self.notification_conn:
             await self.notification_conn.close()
-            self.notification_conn = None 
+            self.notification_conn = None
 
     async def get_task_insight(self, task_id: str) -> Optional[CommunityInsight]:
         """Get insight by task_id."""
@@ -433,18 +481,4 @@ class CommunityInsightRepository:
             return insight
         except Exception as e:
             logger.error(f"Error getting insight for task {task_id}: {str(e)}", exc_info=True)
-            raise 
-
-    async def get_project_queries(self, project_id: str) -> List[str]:
-        """Get all unique queries for a project's community insights."""
-        try:
-            stmt = select(CommunityInsight.query).distinct().where(
-                CommunityInsight.project_id == project_id,
-                CommunityInsight.query.isnot(None)
-            )
-            result = await self.session.execute(stmt)
-            queries = result.scalars().all()
-            return [query for query in queries if query]  # Filter out None values
-        except Exception as e:
-            logger.error(f"Error getting project queries: {str(e)}", exc_info=True)
             raise 

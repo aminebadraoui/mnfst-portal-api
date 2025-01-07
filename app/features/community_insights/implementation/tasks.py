@@ -39,7 +39,8 @@ def process_insights_task(
         
         # Initialize parser and repository
         parser = PerplexityParser()
-        repository = CommunityInsightRepository(None)  # Will be initialized with session later
+        insight_repository = CommunityInsightRepository(None)  # Will be initialized with session later
+        task_repository = TaskRepository(None)  # Will be initialized with session later
         
         # Run the async process_insights in a new event loop
         loop = asyncio.new_event_loop()
@@ -50,8 +51,9 @@ def process_insights_task(
                 try:
                     # Create repository with database session
                     async with AsyncSessionLocal() as session:
-                        repository.session = session  # Set the session
-                        task = CommunityInsightsTask(parser=parser, task_repository=repository)
+                        insight_repository.session = session  # Set the session
+                        task_repository.session = session  # Set the session
+                        task = CommunityInsightsTask(parser=parser, task_repository=insight_repository)
                         
                         result = await task.process_insights(
                             project_id=project_id,
@@ -60,7 +62,8 @@ def process_insights_task(
                             user_query=user_query,
                             source_urls=source_urls,
                             product_urls=product_urls,
-                            use_only_specified_sources=use_only_specified_sources
+                            use_only_specified_sources=use_only_specified_sources,
+                            task_id=self.request.id  # Pass the Celery task ID
                         )
                         
                         logger.info("Parsed results received from task:")
@@ -89,7 +92,7 @@ def process_insights_task(
                                 logger.error(f"Invalid avatars format - expected list but got {type(avatars)}")
                                 avatars = []
                                 
-                            await repository.append_to_insight(
+                            await insight_repository.append_to_insight(
                                 task_id=task_id,
                                 new_sections=sections,
                                 new_avatars=avatars,
@@ -97,7 +100,7 @@ def process_insights_task(
                             )
                             
                             # Verify the save was successful by reading back the data
-                            saved_insight = await repository.get_task_insight(task_id)
+                            saved_insight = await insight_repository.get_task_insight(task_id)
                             if not saved_insight:
                                 raise ValueError(f"Failed to verify save - could not find task {task_id}")
                             
@@ -106,6 +109,10 @@ def process_insights_task(
                                 
                             logger.info(f"Successfully verified save - found {len(saved_insight.sections)} sections in database")
                             logger.info(f"Saved sections: {json.dumps(saved_insight.sections, indent=2)}")
+                            
+                            # Update task status to completed as the final step
+                            await task_repository.update_task_status(task_id, "completed")
+                            logger.info(f"Task completed successfully for project {project_id}")
                             
                         except Exception as save_error:
                             logger.error(f"Failed to save results: {str(save_error)}", exc_info=True)
@@ -116,7 +123,7 @@ def process_insights_task(
                     logger.error(f"Error in async process: {str(inner_e)}", exc_info=True)
                     # Update task with error
                     try:
-                        await repository.append_to_insight(
+                        await insight_repository.append_to_insight(
                             task_id=task_id,
                             error=str(inner_e)
                         )
@@ -125,7 +132,7 @@ def process_insights_task(
                     raise InsightProcessingError(f"Failed to process insights: {str(inner_e)}")
 
             result = loop.run_until_complete(process_and_update())
-            logger.info(f"Task completed successfully for project {project_id}")
+            
             return {
                 "status": "completed",
                 "sections": result.get("sections", []),
