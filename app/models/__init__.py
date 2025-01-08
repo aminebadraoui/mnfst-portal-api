@@ -10,6 +10,7 @@ from .user import (
     UserUpdate,
     UserResponse
 )
+from .project import Project
 
 __all__ = [
     "Base",
@@ -17,5 +18,6 @@ __all__ = [
     "UserBase",
     "UserCreate",
     "UserUpdate",
-    "UserResponse"
+    "UserResponse",
+    "Project"
 ]

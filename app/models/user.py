@@ -23,7 +23,13 @@ class User(Base):
 
     # Relationships
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
-    community_insights = relationship("CommunityInsight", back_populates="user", cascade="all, delete-orphan")
+    
+    # Analysis relationships
+    pain_analysis = relationship("PainAnalysis", back_populates="user", cascade="all, delete-orphan")
+    pattern_analysis = relationship("PatternAnalysis", back_populates="user", cascade="all, delete-orphan")
+    product_analysis = relationship("ProductAnalysis", back_populates="user", cascade="all, delete-orphan")
+    question_analysis = relationship("QuestionAnalysis", back_populates="user", cascade="all, delete-orphan")
+    avatar_analysis = relationship("AvatarAnalysis", back_populates="user", cascade="all, delete-orphan")
 
 class UserBase(BaseModel):
     email: EmailStr

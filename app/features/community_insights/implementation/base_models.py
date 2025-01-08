@@ -83,6 +83,7 @@ class AvatarProfile(BaseModel):
     title: str = "Key Characteristics"
     description: str
     evidence: str
+    query: str = ""
     needs: List[str] = Field(default_factory=list)
     pain_points: List[str] = Field(default_factory=list)
     behaviors: List[str] = Field(default_factory=list)

@@ -1,5 +1,4 @@
-from typing import Dict, Any, List
-from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import logging
 from pydantic_ai import Agent, RunContext
@@ -11,13 +10,14 @@ from .base_models import (
     PainInsight, QuestionInsight, PatternInsight, AvatarResult, AvatarProfile,
     ParserResult, ParserInput, ProductAnalysisResult, FailedSolutionsResult
 )
+import json
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class ParserDeps:
-    content: str
-    topic_keyword: str
+class ParserDeps(BaseModel):
+    """Dependencies for parsing perplexity research content."""
+    content: str = Field(..., description="Raw perplexity research content")
+    topic_keyword: str = Field(..., description="The main topic being analyzed")
 
 class PerplexityParser:
     def __init__(self):
@@ -26,40 +26,163 @@ class PerplexityParser:
             self.model = OpenAIModel('gpt-4o-mini')
             logger.info("OpenAI model initialized with gpt-4o-mini")
             
-            # Agent for parsing pain & frustration analysis
-            self.pain_agent = Agent[None, PainAnalysisResult](  # type: ignore
-                model=self.model,
-                result_type=PainAnalysisResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are a pain & frustration insights parser.
-Your task is to analyze content and extract ONLY insights about user pain points and frustrations.
+            # Initialize agents for each section type
+            self._init_agents()
+            logger.info("Pydantic AI agents initialized with system prompts")
+        except Exception as e:
+            logger.error(f"Error initializing PerplexityParser: {str(e)}", exc_info=True)
+            raise
 
-Focus EXCLUSIVELY on:
+    async def process_section(
+        self,
+        section_type: str,
+        content: str,
+        topic_keyword: str,
+        user_query: str,
+    ) -> Dict[str, Any]:
+        """Process content into structured insights for a section."""
+        logger.info(f"Processing section: {section_type} with query: {user_query}")
+        
+        try:
+            # Create parser dependencies
+            deps = ParserDeps(
+                content=content,
+                topic_keyword=topic_keyword
+            )
+            
+            # Process with appropriate agent based on section type
+            logger.info(f"Processing with agent for {section_type}")
+            result = None
+            
+            if section_type == "Pain & Frustration Analysis":
+                result = await self.pain_agent.run(content, deps=deps)
+                logger.info(f"Pain agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+            elif section_type == "Failed Solutions Analysis":
+                result = await self.failed_solutions_agent.run(content, deps=deps)
+                logger.info(f"Failed solutions agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+            elif section_type == "Question & Advice Mapping":
+                result = await self.question_agent.run(content, deps=deps)
+                logger.info(f"Question agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+            elif section_type == "Pattern Detection":
+                result = await self.pattern_agent.run(content, deps=deps)
+                logger.info(f"Pattern agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+            elif section_type == "Popular Products Analysis":
+                result = await self.product_agent.run(content, deps=deps)
+                logger.info(f"Product agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+            elif section_type == "Avatars":
+                result = await self.avatars_agent.run(content, deps=deps)
+                logger.info(f"Avatars agent result: {json.dumps(result.data.dict() if result and result.data else {})}")
+                # For avatars, return them in the avatars field
+                avatars_data = result.data.dict().get("avatars", []) if result and result.data else []
+                # Add query to each avatar's insights
+                for avatar in avatars_data:
+                    if avatar.get("insights"):
+                        for insight in avatar["insights"]:
+                            insight["query"] = user_query
+                            logger.info(f"Added query {user_query} to avatar insight: {insight.get('title', 'No title')}")
+                return {
+                    "section": None,
+                    "avatars": avatars_data,
+                    "raw_response": content
+                }
+            else:
+                raise ValueError(f"Unknown section type: {section_type}")
+            
+            # Format and return results for non-avatar sections
+            if result and result.data:
+                section_data = result.data.dict()
+                # Ensure the section has the correct title and icon
+                section_data["title"] = section_type
+                section_data["icon"] = self._get_section_icon(section_type)
+                
+                # Add query to each insight
+                if section_data.get("insights"):
+                    for insight in section_data["insights"]:
+                        insight["query"] = user_query
+                        logger.info(f"Added query {user_query} to insight: {insight.get('title', 'No title')}")
+                
+                # Log the final section data
+                logger.info(f"Final section data for {section_type}: {json.dumps(section_data)}")
+                
+                return {
+                    "section": section_data,
+                    "avatars": [],
+                    "raw_response": content
+                }
+            else:
+                logger.warning(f"No data returned from agent for {section_type}")
+                return {
+                    "section": {
+                        "title": section_type,
+                        "icon": self._get_section_icon(section_type),
+                        "insights": []
+                    },
+                    "avatars": [],
+                    "raw_response": content
+                }
+
+        except Exception as e:
+            logger.error(f"Error processing section {section_type}: {str(e)}", exc_info=True)
+            return {
+                "section": {
+                    "title": section_type,
+                    "icon": self._get_section_icon(section_type),
+                    "insights": []
+                },
+                "avatars": [],
+                "raw_response": ""
+            }
+
+    def _get_section_icon(self, section_type: str) -> str:
+        """Get the icon for a section type."""
+        icons = {
+            "Pain & Frustration Analysis": "FaExclamationCircle",
+            "Failed Solutions Analysis": "FaTimesCircle",
+            "Question & Advice Mapping": "FaQuestionCircle",
+            "Pattern Detection": "FaChartLine",
+            "Popular Products Analysis": "FaShoppingCart"
+        }
+        return icons.get(section_type, "FaCircle") 
+
+    def _init_agents(self):
+        """Initialize all parsing agents."""
+        # Agent for parsing pain & frustration analysis
+        self.pain_agent = Agent[None, PainAnalysisResult](  # type: ignore
+            model=self.model,
+            result_type=PainAnalysisResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are a pain & frustration insights parser.
+Your task is to analyze the provided content from perplexity research about pain points and frustrations.
+
+The content will focus on:
 - Most emotionally charged complaints
 - Recurring sources of anger
 - Hidden frustrations
 - Indirect expressions of dissatisfaction
+- Cascade effects of problems
+- Time patterns in complaint posting
 
-DO NOT include insights about questions, advice, or patterns.
+For each insight, provide:
+1. A clear title/description
+2. Supporting evidence (direct quotes)
+3. Source URL in plain text
+4. Engagement metrics (upvotes, comments)
+5. Frequency of occurrence
+6. Correlation with other patterns
+7. Significance/implications
 
-For each insight, include:
-- A clear title describing the insight
-- Direct quotes as evidence
-- Source URLs in plain text
-- Engagement metrics (upvotes, comments)
-- How frequently this appears in discussions
-- Related patterns or correlations
-- The significance or impact on users""")
+Focus on emotional impact and user frustrations.
+Organize findings by engagement level (most discussed/upvoted first).""")
 
-            # Agent for parsing question & advice mapping
-            self.question_agent = Agent[None, QuestionMappingResult](  # type: ignore
-                model=self.model,
-                result_type=QuestionMappingResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are a question & advice insights parser.
-Your task is to analyze content and extract ONLY insights about user questions and advice.
+        # Agent for parsing question & advice mapping
+        self.question_agent = Agent[None, QuestionMappingResult](  # type: ignore
+            model=self.model,
+            result_type=QuestionMappingResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are a question & advice insights parser.
+Your task is to analyze the provided content from perplexity research about questions and advice.
 
-Focus EXCLUSIVELY on:
+The content will focus on:
 - Most frequently asked questions
 - Most upvoted advice
 - Most debated solutions
@@ -67,26 +190,27 @@ Focus EXCLUSIVELY on:
 - Success stories with details
 - Failure patterns with context
 
-DO NOT include insights about pain points, frustrations, or general patterns.
+For each insight, provide:
+1. A clear title/description
+2. Supporting evidence (direct quotes)
+3. Source URL in plain text
+4. Engagement metrics (upvotes, comments)
+5. Frequency of occurrence
+6. Correlation with other patterns
+7. Significance/implications
 
-For each insight, include:
-- A clear title describing the insight
-- Direct quotes as evidence
-- Source URLs in plain text
-- Engagement metrics (upvotes, comments)
-- How frequently this appears in discussions
-- Related patterns or correlations
-- The significance or impact on users""")
+Focus on what users are asking and what solutions work.
+Organize findings by engagement level (most discussed/upvoted first).""")
 
-            # Agent for parsing pattern detection
-            self.pattern_agent = Agent[None, PatternDetectionResult](  # type: ignore
-                model=self.model,
-                result_type=PatternDetectionResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are a pattern detection insights parser.
-Your task is to analyze content and extract ONLY insights about patterns and trends.
+        # Agent for parsing pattern detection
+        self.pattern_agent = Agent[None, PatternDetectionResult](  # type: ignore
+            model=self.model,
+            result_type=PatternDetectionResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are a pattern detection insights parser.
+Your task is to analyze the provided content from perplexity research about patterns and trends.
 
-Focus EXCLUSIVELY on:
+The content will focus on:
 - Unusual word combinations
 - Vocabulary differences between users
 - Shifts in problem descriptions
@@ -95,51 +219,27 @@ Focus EXCLUSIVELY on:
 - Secondary effects users overlook
 - Unexpected relationships between issues
 
-DO NOT include insights about pain points, questions, or advice.
+For each insight, provide:
+1. A clear title/description
+2. Supporting evidence (direct quotes)
+3. Source URL in plain text
+4. Engagement metrics (upvotes, comments)
+5. Frequency of occurrence
+6. Correlation with other patterns
+7. Significance/implications
 
-For each insight, include:
-- A clear title describing the insight
-- Direct quotes as evidence
-- Source URLs in plain text
-- Engagement metrics (upvotes, comments)
-- How frequently this appears in discussions
-- Related patterns or correlations
-- The significance or impact on users""")
+Focus on unexpected patterns and hidden relationships.
+Organize findings by engagement level (most discussed/upvoted first).""")
 
-            # Agent for parsing avatars
-            self.avatars_agent = Agent[None, AvatarsResult](  # type: ignore
-                model=self.model,
-                result_type=AvatarsResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are an avatar parser focused on identifying distinct user types from discussions.
-Your task is to analyze content and identify unique user personas based on:
+        # Agent for parsing product analysis
+        self.product_agent = Agent[None, ProductAnalysisResult](  # type: ignore
+            model=self.model,
+            result_type=ProductAnalysisResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are a product analysis parser.
+Your task is to analyze the provided content from perplexity research about products and market opportunities.
 
-- How they describe their experiences
-- What solutions they seek
-- Their approach to problems
-- Their interaction patterns
-- Their decision-making process
-
-For each identified avatar:
-- Give them a descriptive name that captures their essence
-- Create a profile based on actual quotes
-- Document their specific needs and challenges
-- Note their typical behaviors
-- Include supporting evidence with sources
-- List their pain points
-- Describe their decision-making process
-
-Focus on creating distinct, non-overlapping avatars that capture major user segments evident in the discussions.""")
-
-            # Agent for parsing product analysis
-            self.product_agent = Agent[None, ProductAnalysisResult](  # type: ignore
-                model=self.model,
-                result_type=ProductAnalysisResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are a product analysis parser focused on popular products and market opportunities.
-Your task is to analyze content and extract insights about products from Amazon, eBay, and Google Shopping.
-
-Focus EXCLUSIVELY on:
+The content will focus on:
 - Most popular products in the category
 - Price ranges and variations
 - Common positive feedback themes
@@ -159,19 +259,17 @@ For each product insight, include:
 - Engagement metrics (reviews, ratings)
 - Frequency of mentions
 - Correlation with other products
-- Market significance
+- Market significance""")
 
-Focus on identifying patterns in customer feedback and market opportunities.""")
+        # Agent for parsing failed solutions
+        self.failed_solutions_agent = Agent[None, FailedSolutionsResult](  # type: ignore
+            model=self.model,
+            result_type=FailedSolutionsResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are a failed solutions parser.
+Your task is to analyze the provided content from perplexity research about failed solutions and attempts.
 
-            # Agent for parsing failed solutions
-            self.failed_solutions_agent = Agent[None, FailedSolutionsResult](  # type: ignore
-                model=self.model,
-                result_type=FailedSolutionsResult,
-                deps_type=ParserDeps,
-                system_prompt="""You are a failed solutions parser focused on identifying unsuccessful attempts and approaches.
-Your task is to analyze content and extract insights about solutions that didn't work.
-
-Focus EXCLUSIVELY on:
+The content will focus on:
 - Most common failed approaches
 - Solutions that made problems worse
 - Abandoned treatment methods
@@ -180,361 +278,44 @@ Focus EXCLUSIVELY on:
 - Misguided advice that backfired
 - Common mistakes and pitfalls
 
-For each failed solution insight, include:
-- A clear title describing what failed
-- Direct quotes as evidence
-- Source URL in plain text
-- Engagement metrics (upvotes, comments)
-- How frequently this failure appears
-- Related patterns or correlations
-- The significance or impact on users
+For each insight, provide:
+1. A clear title describing the failed solution
+2. Direct quotes as evidence
+3. Source URL in plain text
+4. Engagement metrics (upvotes, comments)
+5. How frequently this failure appears
+6. Related patterns or correlations
+7. The significance or impact on users
 
-Focus on understanding why these solutions failed and what can be learned.""")
+Focus on understanding why these solutions failed and what can be learned.
+Organize findings by frequency and impact level.""")
 
-            logger.info("Pydantic AI agents initialized with system prompts")
-        except Exception as e:
-            logger.error(f"Error initializing PerplexityParser: {str(e)}", exc_info=True)
-            raise
+        # Agent for parsing avatars
+        self.avatars_agent = Agent[None, AvatarsResult](  # type: ignore
+            model=self.model,
+            result_type=AvatarsResult,
+            deps_type=ParserDeps,
+            system_prompt="""You are an avatars insights parser.
+Your task is to analyze the provided content from perplexity research to identify distinct user personas or avatars.
 
-    async def parse_pain_analysis(self, content: str, topic_keyword: str) -> PainAnalysisResult:
-        """
-        Parse pain & frustration analysis insights.
-        """
-        try:
-            logger.info("Starting to parse pain & frustration analysis")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
+The content will focus on:
+- Distinct user types and personas
+- Common behavioral patterns
+- Shared pain points and needs
+- Typical user journeys
+- Decision-making patterns
+- Success and failure stories
+- Interaction styles
 
-            result = await self.pain_agent.run(
-                f"""Extract pain & frustration insights from this content:
+For each avatar, provide:
+1. A descriptive name/title
+2. Type/category of user
+3. Key insights about their behavior
+4. Supporting evidence (direct quotes)
+5. Primary needs and motivations
+6. Common pain points
+7. Typical behaviors and patterns
+8. Source URLs for evidence
 
-{content}
-
-Topic: {topic_keyword}
-
-Return insights in this format:
-{{
-  "title": "Pain & Frustration Analysis",
-  "icon": "FaExclamationCircle",
-  "insights": [
-    {{
-      "title": "Clear title of the insight",
-      "evidence": "Direct quote from the content",
-      "source_url": "Source URL in plain text",
-      "engagement_metrics": "Upvotes, comments, etc.",
-      "frequency": "How often this appears",
-      "correlation": "Related patterns",
-      "significance": "Impact on users"
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from pain agent")
-                return PainAnalysisResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_pain_analysis: {str(e)}", exc_info=True)
-            return PainAnalysisResult()
-
-    async def parse_question_mapping(self, content: str, topic_keyword: str) -> QuestionMappingResult:
-        """
-        Parse question & advice mapping insights.
-        """
-        try:
-            logger.info("Starting to parse question & advice mapping")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
-
-            result = await self.question_agent.run(
-                f"""Extract question & advice insights from this content:
-
-{content}
-
-Topic: {topic_keyword}
-
-Return insights in this format:
-{{
-  "title": "Question & Advice Mapping",
-  "icon": "FaQuestionCircle",
-  "insights": [
-    {{
-      "title": "Clear title of the insight",
-      "evidence": "Direct quote from the content",
-      "source_url": "Source URL in plain text",
-      "engagement_metrics": "Upvotes, comments, etc.",
-      "frequency": "How often this appears",
-      "correlation": "Related patterns",
-      "significance": "Impact on users"
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from question agent")
-                return QuestionMappingResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_question_mapping: {str(e)}", exc_info=True)
-            return QuestionMappingResult()
-
-    async def parse_pattern_detection(self, content: str, topic_keyword: str) -> PatternDetectionResult:
-        """
-        Parse pattern detection insights.
-        """
-        try:
-            logger.info("Starting to parse pattern detection")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
-
-            result = await self.pattern_agent.run(
-                f"""Extract pattern detection insights from this content:
-
-{content}
-
-Topic: {topic_keyword}
-
-Return insights in this format:
-{{
-  "title": "Pattern Detection",
-  "icon": "FaChartLine",
-  "insights": [
-    {{
-      "title": "Clear title of the insight",
-      "evidence": "Direct quote from the content",
-      "source_url": "Source URL in plain text",
-      "engagement_metrics": "Upvotes, comments, etc.",
-      "frequency": "How often this appears",
-      "correlation": "Related patterns",
-      "significance": "Impact on users"
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from pattern agent")
-                return PatternDetectionResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_pattern_detection: {str(e)}", exc_info=True)
-            return PatternDetectionResult()
-
-    async def parse_avatars(self, content: str, topic_keyword: str) -> AvatarsResult:
-        """
-        Parse avatars from Perplexity response.
-        """
-        try:
-            logger.info("Starting to parse avatars")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
-
-            result = await self.avatars_agent.run(
-                f"""Extract avatars from this content:
-
-{content}
-
-Topic: {topic_keyword}
-
-Return avatars in this format:
-{{
-  "avatars": [
-    {{
-      "name": "Descriptive name of the avatar",
-      "type": "Category/type of user",
-      "insights": [
-        {{
-          "title": "Key Characteristics",
-          "description": "Detailed profile of this user type",
-          "evidence": "Direct quotes that support this profile",
-          "needs": ["List of specific needs"],
-          "pain_points": ["List of pain points"],
-          "behaviors": ["List of typical behaviors"]
-        }}
-      ]
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from avatars agent")
-                return AvatarsResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_avatars: {str(e)}", exc_info=True)
-            return AvatarsResult()
-
-    async def parse_product_analysis(self, content: str, topic_keyword: str) -> ProductAnalysisResult:
-        """
-        Parse product analysis insights.
-        """
-        try:
-            logger.info("Starting to parse product analysis")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
-
-            result = await self.product_agent.run(
-                f"""Extract product analysis insights from this content:
-
-{content}
-
-Topic: {topic_keyword}
-
-Return insights in this format:
-{{
-  "title": "Popular Products Analysis",
-  "icon": "FaShoppingCart",
-  "insights": [
-    {{
-      "title": "Product name and description",
-      "platform": "Amazon/eBay/Google Shopping",
-      "price_range": "Price range",
-      "positive_feedback": ["List of positive points"],
-      "negative_feedback": ["List of negative points"],
-      "market_gap": "Identified market opportunity",
-      "source_url": "Source URL in plain text",
-      "engagement_metrics": "Reviews, ratings, etc.",
-      "frequency": "How often mentioned",
-      "correlation": "Related products/patterns",
-      "significance": "Market impact"
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from product agent")
-                return ProductAnalysisResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_product_analysis: {str(e)}", exc_info=True)
-            return ProductAnalysisResult()
-
-    async def parse_failed_solutions(self, content: str, topic_keyword: str) -> FailedSolutionsResult:
-        """
-        Parse failed solutions insights.
-        """
-        try:
-            logger.info("Starting to parse failed solutions")
-            deps = ParserDeps(content=content, topic_keyword=topic_keyword)
-
-            result = await self.failed_solutions_agent.run(
-                f"""Extract failed solutions insights from this content:
-
-{content}
-
-Topic: {topic_keyword}
-
-Return insights in this format:
-{{
-  "title": "Failed Solutions Analysis",
-  "icon": "FaTimesCircle",
-  "insights": [
-    {{
-      "title": "Clear title of the failed solution",
-      "evidence": "Direct quote from the content",
-      "source_url": "Source URL in plain text",
-      "engagement_metrics": "Upvotes, comments, etc.",
-      "frequency": "How often this appears",
-      "correlation": "Related patterns",
-      "significance": "Impact on users"
-    }}
-  ]
-}}""",
-                deps=deps
-            )
-            
-            if result is None or result.data is None:
-                logger.warning("Received None response from failed solutions agent")
-                return FailedSolutionsResult()
-                
-            return result.data
-            
-        except Exception as e:
-            logger.error(f"Error in parse_failed_solutions: {str(e)}", exc_info=True)
-            return FailedSolutionsResult()
-
-    # For backward compatibility
-    async def parse_insights(self, pain_content: str, question_content: str, pattern_content: str, topic_keyword: str) -> ParserResult:
-        """
-        Parse all insights sections from separate outputs.
-        """
-        # Parse each section separately
-        pain_result = await self.parse_pain_analysis(pain_content, topic_keyword)
-        question_result = await self.parse_question_mapping(question_content, topic_keyword)
-        pattern_result = await self.parse_pattern_detection(pattern_content, topic_keyword)
-        
-        # Convert to InsightSection format
-        sections = [
-            InsightSection(
-                title=pain_result.title,
-                icon=pain_result.icon,
-                insights=[insight.dict() for insight in pain_result.insights]
-            ),
-            InsightSection(
-                title=question_result.title,
-                icon=question_result.icon,
-                insights=[insight.dict() for insight in question_result.insights]
-            ),
-            InsightSection(
-                title=pattern_result.title,
-                icon=pattern_result.icon,
-                insights=[insight.dict() for insight in pattern_result.insights]
-            )
-        ]
-        
-        return ParserResult(
-            status="completed",
-            sections=sections,
-            raw_perplexity_response=f"""Pain Analysis:
-{pain_content}
-
-Question Mapping:
-{question_content}
-
-Pattern Detection:
-{pattern_content}"""
-        )
-
-    # For backward compatibility
-    async def parse_response(self, pain_content: str, question_content: str, pattern_content: str, avatars_content: str, topic_keyword: str) -> ParserResult:
-        """
-        Parse insights and avatars from separate outputs.
-        """
-        # Parse insights and avatars separately
-        insights_result = await self.parse_insights(pain_content, question_content, pattern_content, topic_keyword)
-        avatars_result = await self.parse_avatars(avatars_content, topic_keyword)
-        
-        # Convert AvatarsResult to list of Avatar
-        avatars = [
-            Avatar(
-                name=avatar.name,
-                type=avatar.type,
-                insights=[
-                    AvatarInsight(
-                        title=insight.title,
-                        description=insight.description,
-                        evidence=insight.evidence,
-                        needs=insight.needs,
-                        pain_points=insight.pain_points,
-                        behaviors=insight.behaviors
-                    ) for insight in avatar.insights
-                ]
-            ) for avatar in avatars_result.avatars
-        ]
-        
-        insights_result.avatars = avatars
-        return insights_result 
+Focus on creating distinct, well-defined personas that represent different user segments.
+Ensure each avatar is backed by evidence from the research.""") 

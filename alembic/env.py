@@ -11,6 +11,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import settings
 from app.models.base import Base
 from app.models.user import User
+from app.models.project import Project
+from app.features.research_hub.models.database.pain_analysis import PainAnalysis
+from app.features.research_hub.models.database.question_analysis import QuestionAnalysis
+from app.features.research_hub.models.database.pattern_analysis import PatternAnalysis
+from app.features.research_hub.models.database.product_analysis import ProductAnalysis
+from app.features.research_hub.models.database.avatar_analysis import AvatarAnalysis
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 def get_pain_analysis_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
@@ -13,7 +14,7 @@ def get_pain_analysis_prompt(
     Generate a prompt for pain & frustration analysis.
     """
     prompt_parts = [
-        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        f"Analyze community discussions about the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Reddit and relevant forums.",
         "\nFocus on pain points and frustrations. Analyze:",
         "- Most emotionally charged complaints",
         "- Recurring sources of anger",
@@ -42,6 +43,7 @@ def get_pain_analysis_prompt(
 
 def get_question_mapping_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
@@ -50,7 +52,7 @@ def get_question_mapping_prompt(
     Generate a prompt for question & advice mapping.
     """
     prompt_parts = [
-        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        f"Analyze community discussions about the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Reddit and relevant forums.",
         "\nFocus on questions and advice. Analyze:",
         "- Most frequently asked questions",
         "- Most upvoted advice",
@@ -79,6 +81,7 @@ def get_question_mapping_prompt(
 
 def get_pattern_detection_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
@@ -87,7 +90,7 @@ def get_pattern_detection_prompt(
     Generate a prompt for pattern detection.
     """
     prompt_parts = [
-        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        f"Analyze community discussions about the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Reddit and relevant forums.",
         "\nFocus on patterns and trends. Analyze:",
         "- Unusual word combinations",
         "- Vocabulary differences between users",
@@ -117,15 +120,16 @@ def get_pattern_detection_prompt(
 
 def get_avatars_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
 ) -> str:
     """
-    Generate a prompt for question & advice mapping.
+    Generate a prompt for avatar analysis.
     """
     prompt_parts = [
-        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        f"Analyze community discussions about the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Reddit and relevant forums.",
         "\nConstruct detailed customer avatars that represent distinct user segments. For each avatar, provide:",
         "- Demographic indicators found in discussions",
         "- Primary pain points (with supporting quotes)",
@@ -152,6 +156,7 @@ def get_avatars_prompt(
 
 def get_product_analysis_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
@@ -160,7 +165,7 @@ def get_product_analysis_prompt(
     Generate a prompt for product analysis.
     """
     prompt_parts = [
-        f"Analyze popular products related to the following topic: `{topic_keyword}` . Search across Amazon, eBay, and Google Shopping.",
+        f"Analyze popular products related to the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Amazon, eBay, and Google Shopping.",
         "\nFocus on product analysis. For each platform, analyze:",
         "- Most popular products in this category",
         "- Price ranges and variations",
@@ -194,6 +199,7 @@ def get_product_analysis_prompt(
 
 def get_failed_solutions_prompt(
     topic_keyword: str,
+    user_query: str,
     source_urls: List[str] = None,
     product_urls: List[str] = None,
     use_only_specified_sources: bool = False
@@ -202,7 +208,7 @@ def get_failed_solutions_prompt(
     Generate a prompt for failed solutions analysis.
     """
     prompt_parts = [
-        f"Analyze community discussions about the following topic: `{topic_keyword}` . Search across Reddit and relevant forums.",
+        f"Analyze community discussions about the following topic: `{topic_keyword}` with specific focus on: `{user_query}`. Search across Reddit and relevant forums.",
         "\nFocus on failed solutions and attempts. Analyze:",
         "- Most common failed approaches",
         "- Solutions that made problems worse",
@@ -230,31 +236,4 @@ def get_failed_solutions_prompt(
     logger.debug(f"Generated failed solutions prompt for topic: {topic_keyword}")
     return prompt
 
-# For backward compatibility
-def get_insights_prompt(
-    topic_keyword: str,
-    source_urls: List[str] = None,
-    product_urls: List[str] = None,
-    use_only_specified_sources: bool = False
-) -> str:
-    """
-    Generate a combined prompt for insights analysis.
-    """
-    pain_prompt = get_pain_analysis_prompt(topic_keyword, source_urls, product_urls, use_only_specified_sources)
-    question_prompt = get_question_mapping_prompt(topic_keyword, source_urls, product_urls, use_only_specified_sources)
-    pattern_prompt = get_pattern_detection_prompt(topic_keyword, source_urls, product_urls, use_only_specified_sources)
-    return f"{pain_prompt}\n\n{question_prompt}\n\n{pattern_prompt}"
 
-# For backward compatibility
-def get_community_insights_prompt(
-    topic_keyword: str,
-    source_urls: List[str] = None,
-    product_urls: List[str] = None,
-    use_only_specified_sources: bool = False
-) -> str:
-    """
-    Generate a combined prompt for community insights analysis.
-    """
-    insights_prompt = get_insights_prompt(topic_keyword, source_urls, product_urls, use_only_specified_sources)
-    avatars_prompt = get_avatars_prompt(topic_keyword, source_urls, product_urls, use_only_specified_sources)
-    return f"{insights_prompt}\n\n{avatars_prompt}" 

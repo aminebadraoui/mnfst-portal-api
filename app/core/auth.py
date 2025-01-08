@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, WebSocket
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 
 from .config import settings
 from ..models.user import User
-from .database import get_db
+from .database import get_db, AsyncSessionLocal
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -65,4 +65,39 @@ async def get_current_user(
     
     if user is None:
         raise credentials_exception
-    return user 
+    return user
+
+async def get_current_user_ws(websocket: WebSocket) -> User:
+    """
+    Authenticate WebSocket connections using JWT token from query parameters.
+    """
+    try:
+        token = websocket.query_params.get("token")
+        if not token:
+            await websocket.close(code=4001, reason="Missing authentication token")
+            return None
+
+        try:
+            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                await websocket.close(code=4001, reason="Invalid authentication token")
+                return None
+        except JWTError:
+            await websocket.close(code=4001, reason="Invalid authentication token")
+            return None
+
+        async with AsyncSessionLocal() as session:
+            query = select(User).where(User.email == email)
+            result = await session.execute(query)
+            user = result.scalar_one_or_none()
+
+            if user is None:
+                await websocket.close(code=4001, reason="User not found")
+                return None
+
+            return user
+
+    except Exception as e:
+        await websocket.close(code=4500, reason="Internal server error")
+        return None 

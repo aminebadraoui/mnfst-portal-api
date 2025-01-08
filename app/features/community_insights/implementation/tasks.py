@@ -1,9 +1,8 @@
 from typing import Dict, List, Optional, Any
 import logging
 from celery import shared_task
-from .task import CommunityInsightsTask
 from .parser import PerplexityParser
-from .repository import TaskRepository, CommunityInsightRepository
+from .repository import CommunityInsightRepository
 from ....core.config import settings
 from ....core.celery import celery_app
 from ....core.database import AsyncSessionLocal
@@ -11,6 +10,9 @@ import asyncio
 import json
 import traceback
 from celery.exceptions import TaskError
+from .perplexity import PerplexityClient
+from sqlalchemy.sql import select
+from ....models.community_insight import CommunityInsight
 
 logger = logging.getLogger(__name__)
 
@@ -31,130 +33,122 @@ def process_insights_task(
 ) -> Dict[str, Any]:
     """
     Celery task to process community insights.
+    Processes each section independently and updates the database after each section.
+    Flow: perplexity research -> parser agent -> update community insight -> update database
     """
-    logger.info(f"Starting process_insights_task for project {project_id}")
+    task_id = self.request.id
+    logger.info(f"Starting process_insights_task with task_id: {task_id}")
+    
     try:
-        # Update task state to STARTED
-        self.update_state(state='STARTED', meta={'message': 'Task started'})
-        
-        # Initialize parser and repository
+        # Initialize parser
         parser = PerplexityParser()
-        insight_repository = CommunityInsightRepository(None)  # Will be initialized with session later
-        task_repository = TaskRepository(None)  # Will be initialized with session later
         
         # Run the async process_insights in a new event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
         try:
-            # Run process_insights and update status in the same event loop
-            async def process_and_update():
-                try:
-                    # Create repository with database session
-                    async with AsyncSessionLocal() as session:
-                        insight_repository.session = session  # Set the session
-                        task_repository.session = session  # Set the session
-                        task = CommunityInsightsTask(parser=parser, task_repository=insight_repository)
-                        
-                        result = await task.process_insights(
-                            project_id=project_id,
-                            user_id=user_id,
-                            topic_keyword=topic_keyword,
-                            user_query=user_query,
-                            source_urls=source_urls,
-                            product_urls=product_urls,
-                            use_only_specified_sources=use_only_specified_sources,
-                            task_id=self.request.id  # Pass the Celery task ID
-                        )
-                        
-                        logger.info("Parsed results received from task:")
-                        logger.info(f"Number of sections: {len(result.get('sections', []))}")
-                        logger.info(f"Number of avatars: {len(result.get('avatars', []))}")
-                        
-                        # Save the results using the repository
-                        logger.info("Attempting to save results to database")
+            async def process_sections():
+                async with AsyncSessionLocal() as session:
+                    insight_repository = CommunityInsightRepository(session)
+                    perplexity_client = PerplexityClient()
+                    parser = PerplexityParser()
+                    
+                    # Process each section type independently
+                    section_types = [
+                        "Pain & Frustration Analysis",
+                        "Failed Solutions Analysis",
+                        "Question & Advice Mapping",
+                        "Pattern Detection",
+                        "Popular Products Analysis",
+                        "Avatars"
+                    ]
+                    
+                    all_sections = []
+                    all_avatars = []
+                    raw_response = ""
+                    
+                    for section_type in section_types:
                         try:
-                            # Get the task_id from the result
-                            task_id = result.get('task_id')
-                            if not task_id:
-                                raise ValueError("No task_id found in result")
-                                
-                            logger.info(f"Attempting to save sections for task {task_id}")
-                            logger.info(f"Sections to save: {json.dumps(result.get('sections', []), indent=2)}")
+                            logger.info(f"Processing section: {section_type} with query: {user_query}")
                             
-                            # Update the insight with all data
-                            sections = result.get("sections", [])
-                            if not isinstance(sections, list):
-                                logger.error(f"Invalid sections format - expected list but got {type(sections)}")
-                                sections = []
-                            
-                            avatars = result.get("avatars", [])
-                            if not isinstance(avatars, list):
-                                logger.error(f"Invalid avatars format - expected list but got {type(avatars)}")
-                                avatars = []
-                                
-                            await insight_repository.append_to_insight(
-                                task_id=task_id,
-                                new_sections=sections,
-                                new_avatars=avatars,
-                                raw_response=result.get("raw_perplexity_response", "")
+                            # Step 1: Generate insights from Perplexity
+                            logger.info(f"Step 1: Generating insights for {section_type}")
+                            section_content = await perplexity_client.generate_insights(
+                                section_type=section_type,
+                                topic_keyword=topic_keyword,
+                                user_query=user_query,
+                                source_urls=source_urls,
+                                product_urls=product_urls,
+                                use_only_specified_sources=use_only_specified_sources
                             )
                             
-                            # Verify the save was successful by reading back the data
-                            saved_insight = await insight_repository.get_task_insight(task_id)
-                            if not saved_insight:
-                                raise ValueError(f"Failed to verify save - could not find task {task_id}")
+                            if not section_content or not section_content.get("raw_perplexity_response"):
+                                logger.error(f"No content received for section {section_type}")
+                                continue
                             
-                            if not saved_insight.sections:
-                                raise ValueError(f"Failed to verify save - no sections found for task {task_id}")
-                                
-                            logger.info(f"Successfully verified save - found {len(saved_insight.sections)} sections in database")
-                            logger.info(f"Saved sections: {json.dumps(saved_insight.sections, indent=2)}")
+                            # Step 2: Parse the content
+                            logger.info(f"Step 2: Parsing content for {section_type}")
+                            parsed_content = await parser.process_section(
+                                section_type=section_type,
+                                content=section_content["raw_perplexity_response"],
+                                topic_keyword=topic_keyword,
+                                user_query=user_query
+                            )
                             
-                            # Update task status to completed as the final step
-                            await task_repository.update_task_status(task_id, "completed")
-                            logger.info(f"Task completed successfully for project {project_id}")
+                            # Step 3: Store the results
+                            if parsed_content:
+                                logger.info(f"Step 3: Storing results for {section_type}")
+                                if parsed_content.get("section"):
+                                    logger.info(f"Adding section: {parsed_content['section'].get('title')}")
+                                    logger.info(f"Section insights: {json.dumps(parsed_content['section'].get('insights', []))}")
+                                    all_sections.append(parsed_content["section"])
+                                if parsed_content.get("avatars"):
+                                    logger.info(f"Adding avatars: {len(parsed_content['avatars'])}")
+                                    all_avatars.extend(parsed_content["avatars"])
+                                raw_response += f"\n\n{section_content['raw_perplexity_response']}"
+                            else:
+                                logger.warning(f"No parsed content for section {section_type}")
                             
-                        except Exception as save_error:
-                            logger.error(f"Failed to save results: {str(save_error)}", exc_info=True)
-                            raise
-                        
-                        return result
-                except Exception as inner_e:
-                    logger.error(f"Error in async process: {str(inner_e)}", exc_info=True)
-                    # Update task with error
-                    try:
-                        await insight_repository.append_to_insight(
-                            task_id=task_id,
-                            error=str(inner_e)
-                        )
-                    except Exception as update_e:
-                        logger.error(f"Failed to update task with error: {str(update_e)}", exc_info=True)
-                    raise InsightProcessingError(f"Failed to process insights: {str(inner_e)}")
-
-            result = loop.run_until_complete(process_and_update())
+                        except Exception as e:
+                            logger.error(f"Error processing section {section_type}: {str(e)}", exc_info=True)
+                            continue
+                    
+                    # Step 4: Update the insight in the database
+                    logger.info("Step 4: Updating insight in database")
+                    logger.info(f"Sections to store: {json.dumps(all_sections)}")
+                    logger.info(f"Avatars to store: {json.dumps(all_avatars)}")
+                    
+                    await insight_repository.append_to_insight(
+                        task_id=self.request.id,
+                        sections=all_sections,
+                        avatars=all_avatars,
+                        raw_response=raw_response.strip(),
+                        status="completed"
+                    )
+                    
+                    return {
+                        "sections": all_sections,
+                        "avatars": all_avatars,
+                        "raw_perplexity_response": raw_response.strip()
+                    }
+            
+            result = loop.run_until_complete(process_sections())
             
             return {
                 "status": "completed",
-                "sections": result.get("sections", []),
-                "avatars": result.get("avatars", []),
-                "raw_perplexity_response": result.get("raw_perplexity_response")
+                "sections": result["sections"],
+                "avatars": result["avatars"],
+                "raw_perplexity_response": result["raw_perplexity_response"]
             }
+            
         finally:
             loop.close()
+            
     except Exception as e:
-        error_details = {
-            'exc_type': type(e).__name__,
-            'exc_message': str(e),
-            'exc_traceback': traceback.format_exc()
-        }
-        logger.error(f"Error in process_insights_task: {error_details}", exc_info=True)
-        # Update task state to FAILURE with proper error details
+        logger.error(f"Task failed: {str(e)}", exc_info=True)
         self.update_state(
             state='FAILURE',
-            meta={
-                'exc_type': type(e).__name__,
-                'exc_message': str(e),
-                'exc_traceback': traceback.format_exc()
-            }
+            meta={'error': str(e)}
         )
-        raise InsightProcessingError(str(e)).with_traceback(e.__traceback__) 
+        raise InsightProcessingError(str(e)) 
