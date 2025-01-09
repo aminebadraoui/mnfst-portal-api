@@ -21,9 +21,9 @@ class AnalysisModel(Protocol):
 T = TypeVar('T', bound=DeclarativeMeta)
 
 class BaseAnalysisRepository(Generic[T]):
-    def __init__(self, session: AsyncSession, model: Type[T]):
+    def __init__(self, session: AsyncSession, model_class: Type[T]):
         self.session = session
-        self.model = model
+        self.model_class = model_class
 
     async def create(
         self,
@@ -35,7 +35,7 @@ class BaseAnalysisRepository(Generic[T]):
         analysis_type: str
     ) -> T:
         """Create a new analysis record."""
-        analysis = self.model(
+        analysis = self.model_class(
             user_id=user_id,
             project_id=project_id,
             query=query,
@@ -49,9 +49,9 @@ class BaseAnalysisRepository(Generic[T]):
 
     async def get_by_task_id(self, task_id: str, analysis_type: str) -> Optional[T]:
         """Get analysis by task ID and type."""
-        query = select(self.model).where(
-            self.model.task_id == task_id,
-            self.model.analysis_type == analysis_type
+        query = select(self.model_class).where(
+            self.model_class.task_id == task_id,
+            self.model_class.analysis_type == analysis_type
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -66,13 +66,13 @@ class BaseAnalysisRepository(Generic[T]):
     ) -> List[T]:
         """Get all analyses for a project of a specific type."""
         query = (
-            select(self.model)
+            select(self.model_class)
             .where(
-                self.model.project_id == project_id,
-                self.model.user_id == user_id,
-                self.model.analysis_type == analysis_type
+                self.model_class.project_id == project_id,
+                self.model_class.user_id == user_id,
+                self.model_class.analysis_type == analysis_type
             )
-            .order_by(self.model.created_at.desc())
+            .order_by(self.model_class.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -82,10 +82,10 @@ class BaseAnalysisRepository(Generic[T]):
     async def get_project_queries(self, project_id: str) -> List[str]:
         """Get all unique queries for a project."""
         query = (
-            select(self.model.query)
-            .where(self.model.project_id == project_id)
+            select(self.model_class.query)
+            .where(self.model_class.project_id == project_id)
             .distinct()
-            .order_by(self.model.query)
+            .order_by(self.model_class.query)
         )
         result = await self.session.execute(query)
         return [query[0] for query in result.all() if query[0]] 
