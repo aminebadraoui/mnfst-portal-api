@@ -3,6 +3,17 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import uuid
 from app.models.base import Base
+from pydantic import BaseModel
+
+
+class AdvertorialRequest(BaseModel):
+    description: str
+
+
+class AdvertorialSet(BaseModel):
+    story_based: dict
+    informational: dict
+    value_based: dict
 
 
 class StoryBasedAdvertorial(Base):
@@ -20,6 +31,7 @@ class StoryBasedAdvertorial(Base):
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -28,6 +40,7 @@ class StoryBasedAdvertorial(Base):
     # Relationships
     user = relationship("User", back_populates="story_based_advertorials")
     project = relationship("Project", back_populates="story_based_advertorials")
+    product = relationship("app.features.products.models.database.product.Product", back_populates="story_based_advertorials")
 
     # Indexes
     __table_args__ = (
@@ -51,6 +64,7 @@ class ValueBasedAdvertorial(Base):
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -59,11 +73,13 @@ class ValueBasedAdvertorial(Base):
     # Relationships
     user = relationship("User", back_populates="value_based_advertorials")
     project = relationship("Project", back_populates="value_based_advertorials")
+    product = relationship("app.features.products.models.database.product.Product", back_populates="value_based_advertorials")
 
     # Indexes
     __table_args__ = (
         Index('ix_value_based_advertorials_user_project', 'user_id', 'project_id'),
         Index('ix_value_based_advertorials_task_id', 'task_id', unique=True),
+        Index('ix_value_based_advertorials_product_id', 'product_id'),
     )
 
 
@@ -82,6 +98,7 @@ class InformationalAdvertorial(Base):
     # Foreign keys
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -90,9 +107,11 @@ class InformationalAdvertorial(Base):
     # Relationships
     user = relationship("User", back_populates="informational_advertorials")
     project = relationship("Project", back_populates="informational_advertorials")
+    product = relationship("app.features.products.models.database.product.Product", back_populates="informational_advertorials")
 
     # Indexes
     __table_args__ = (
         Index('ix_informational_advertorials_user_project', 'user_id', 'project_id'),
         Index('ix_informational_advertorials_task_id', 'task_id', unique=True),
+        Index('ix_informational_advertorials_product_id', 'product_id'),
     ) 

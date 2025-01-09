@@ -7,15 +7,16 @@ from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.models.user import User
 from .service import generate_advertorials
-from .models import StoryBasedAdvertorial, ValueBasedAdvertorial, InformationalAdvertorial
-from pydantic import BaseModel
+from .models import (
+    StoryBasedAdvertorial,
+    ValueBasedAdvertorial,
+    InformationalAdvertorial,
+    AdvertorialRequest,
+    AdvertorialSet
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-class AdvertorialRequest(BaseModel):
-    description: str
 
 
 router = APIRouter(
@@ -24,7 +25,7 @@ router = APIRouter(
 )
 
 
-@router.post("/generate")
+@router.post("/generate", response_model=AdvertorialSet)
 async def create_advertorials(
     project_id: UUID,
     request: AdvertorialRequest,

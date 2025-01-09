@@ -1,58 +1,33 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth_router, auth, projects, ai, research_hub_router, advertorials_router
-import logging
+from .core.logging import setup_logging
+from .routers import auth_router, projects, ai, research_hub_router, advertorials_router, products_router
 
-# Import all models to ensure they are registered with SQLAlchemy's metadata
-from .models import *
+# Setup logging
+setup_logging()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-logger = logging.getLogger(__name__)
-
-# Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    version=settings.VERSION,
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS_LIST,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include routers
-app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
-app.include_router(auth.router, prefix=settings.API_V1_STR)
-app.include_router(projects.router, prefix=settings.API_V1_STR)
-app.include_router(ai.router, prefix=settings.API_V1_STR, tags=["AI"])
-app.include_router(research_hub_router, prefix=settings.API_V1_STR, tags=["Research Hub"])
-app.include_router(advertorials_router, prefix=settings.API_V1_STR, tags=["Advertorials"])
-
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": str(exc),
-            "path": str(request.url.path)
-        }
-    )
-
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-logger.info("API started and routes configured")
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(ai.router, prefix="/api/v1")
+app.include_router(research_hub_router, prefix="/api/v1")
+app.include_router(advertorials_router, prefix="/api/v1")
+app.include_router(products_router, prefix="/api/v1")

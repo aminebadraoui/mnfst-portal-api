@@ -16,6 +16,7 @@ class Project(Base):
 
     # Relationships
     user = relationship("User", back_populates="projects")
+    products = relationship("app.features.products.models.database.product.Product", back_populates="project", cascade="all, delete-orphan")
 
     # Analysis relationships
     pain_analysis = relationship("PainAnalysis", back_populates="project", cascade="all, delete-orphan")
