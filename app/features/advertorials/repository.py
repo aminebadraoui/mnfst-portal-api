@@ -8,10 +8,11 @@ class StoryBasedAdvertorialRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, project_id: UUID, user_id: UUID) -> StoryBasedAdvertorial:
+    async def create(self, project_id: UUID, user_id: UUID, product_id: UUID) -> StoryBasedAdvertorial:
         advertorial = StoryBasedAdvertorial(
             project_id=project_id,
             user_id=user_id,
+            product_id=product_id,
             status="pending"
         )
         self.db.add(advertorial)
@@ -41,10 +42,11 @@ class ValueBasedAdvertorialRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, project_id: UUID, user_id: UUID) -> ValueBasedAdvertorial:
+    async def create(self, project_id: UUID, user_id: UUID, product_id: UUID) -> ValueBasedAdvertorial:
         advertorial = ValueBasedAdvertorial(
             project_id=project_id,
             user_id=user_id,
+            product_id=product_id,
             status="pending"
         )
         self.db.add(advertorial)
@@ -74,10 +76,11 @@ class InformationalAdvertorialRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, project_id: UUID, user_id: UUID) -> InformationalAdvertorial:
+    async def create(self, project_id: UUID, user_id: UUID, product_id: UUID) -> InformationalAdvertorial:
         advertorial = InformationalAdvertorial(
             project_id=project_id,
             user_id=user_id,
+            product_id=product_id,
             status="pending"
         )
         self.db.add(advertorial)

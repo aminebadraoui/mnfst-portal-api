@@ -42,13 +42,44 @@ async def create_advertorials(
             db=db,
             project_id=project_id,
             user_id=current_user.id,
-            description=request.description
+            project_description=request.project_description,
+            product_description=request.product_description,
+            product_id=request.product_id
         )
         logger.info("Successfully generated all advertorials")
+
+        # Query each advertorial to get their full data
+        story_query = select(StoryBasedAdvertorial).where(StoryBasedAdvertorial.id == story_id)
+        value_query = select(ValueBasedAdvertorial).where(ValueBasedAdvertorial.id == value_id)
+        info_query = select(InformationalAdvertorial).where(InformationalAdvertorial.id == info_id)
+
+        story_result = await db.execute(story_query)
+        value_result = await db.execute(value_query)
+        info_result = await db.execute(info_query)
+
+        story_ad = story_result.scalar_one()
+        value_ad = value_result.scalar_one()
+        info_ad = info_result.scalar_one()
+
         return {
-            "story_based_id": story_id,
-            "value_based_id": value_id,
-            "informational_id": info_id
+            "story_based": {
+                "id": story_ad.id,
+                "status": story_ad.status,
+                "content": story_ad.content,
+                "error": story_ad.error
+            },
+            "value_based": {
+                "id": value_ad.id,
+                "status": value_ad.status,
+                "content": value_ad.content,
+                "error": value_ad.error
+            },
+            "informational": {
+                "id": info_ad.id,
+                "status": info_ad.status,
+                "content": info_ad.content,
+                "error": info_ad.error
+            }
         }
     except Exception as e:
         logger.error(f"Error in advertorial generation endpoint: {str(e)}", exc_info=True)
@@ -110,9 +141,27 @@ async def get_advertorials(
         info_ads = info_result.scalars().all()
 
         return {
-            "story_based": [{"id": ad.id, "status": ad.status, "content": ad.content, "error": ad.error} for ad in story_ads],
-            "value_based": [{"id": ad.id, "status": ad.status, "content": ad.content, "error": ad.error} for ad in value_ads],
-            "informational": [{"id": ad.id, "status": ad.status, "content": ad.content, "error": ad.error} for ad in info_ads]
+            "story_based": [{
+                "id": ad.id,
+                "status": ad.status,
+                "content": ad.content,
+                "error": ad.error,
+                "created_at": ad.created_at.isoformat() if ad.created_at else None
+            } for ad in story_ads],
+            "value_based": [{
+                "id": ad.id,
+                "status": ad.status,
+                "content": ad.content,
+                "error": ad.error,
+                "created_at": ad.created_at.isoformat() if ad.created_at else None
+            } for ad in value_ads],
+            "informational": [{
+                "id": ad.id,
+                "status": ad.status,
+                "content": ad.content,
+                "error": ad.error,
+                "created_at": ad.created_at.isoformat() if ad.created_at else None
+            } for ad in info_ads]
         }
     except Exception as e:
         logger.error(f"Error fetching advertorials: {str(e)}", exc_info=True)

@@ -12,25 +12,22 @@ from .dependencies import (
     ValueAdvertorialDeps
 )
 
-# Common format instructions
-FORMAT_INSTRUCTIONS = """
-Format your response as a clean, readable text with numbered sections.
-Each section should start with the section number and title on its own line, followed by the content.
-Do not include any JSON formatting or markdown in the content itself.
-The content should be pure text that can be displayed directly to the user.
-"""
-
 # Story-based advertorial agent
 story_based_agent = Agent(
     'openai:gpt-4o-mini',
     deps_type=StoryAdvertorialDeps,
     result_type=StoryAdvertorialResult,
-    system_prompt="""You are an expert copywriter specializing in story-based advertorials.
+)
+
+@story_based_agent.system_prompt
+def get_story_system_prompt(ctx: RunContext[StoryAdvertorialDeps]) -> str:
+    return f"""You are an expert copywriter specializing in story-based advertorials.
 Write from the first person perspective of a target customer, using metaphors and analogies 
 that reflect their inner feelings. This format works best for addressing long-term, acute 
 problems where people have struggled to find solutions.
 
-Project Description: {ctx.deps.description}
+Project Description: {ctx.deps.project_description}
+Product Description: {ctx.deps.product_description}
 
 Format your response as markdown text following this structure:
 
@@ -69,19 +66,23 @@ Format your response as markdown text following this structure:
 
 # 12. Final Call to Action
 [Clear next steps]"""
-)
 
 # Informational advertorial agent
 informational_agent = Agent(
     'openai:gpt-4o-mini',
     deps_type=InformationalAdvertorialDeps,
     result_type=InformationalAdvertorialResult,
-    system_prompt="""You are an expert copywriter specializing in informational advertorials.
+)
+
+@informational_agent.system_prompt
+def get_info_system_prompt(ctx: RunContext[InformationalAdvertorialDeps]) -> str:
+    return f"""You are an expert copywriter specializing in informational advertorials.
 Create an educational advertorial that focuses on informing and teaching the reader. 
 This format works particularly well for gadgets, electronics, tools, and other products 
 where understanding the functionality is key to the purchase decision.
 
-Project Description: {ctx.deps.description}
+Project Description: {ctx.deps.project_description}
+Product Description: {ctx.deps.product_description}
 
 Format your response as markdown text following this structure:
 
@@ -120,19 +121,23 @@ Format your response as markdown text following this structure:
 
 # 12. Final Call to Action
 [Clear next steps]"""
-)
 
 # Value-based advertorial agent
 value_based_agent = Agent(
     'openai:gpt-4o-mini',
     deps_type=ValueAdvertorialDeps,
     result_type=ValueAdvertorialResult,
-    system_prompt="""You are an expert copywriter specializing in value-based advertorials.
+)
+
+@value_based_agent.system_prompt
+def get_value_system_prompt(ctx: RunContext[ValueAdvertorialDeps]) -> str:
+    return f"""You are an expert copywriter specializing in value-based advertorials.
 Create an advertorial that focuses on providing immediate value to the reader before 
 presenting the product solution. This format works well for building trust and 
 establishing expertise.
 
-Project Description: {ctx.deps.description}
+Project Description: {ctx.deps.project_description}
+Product Description: {ctx.deps.product_description}
 
 Format your response as markdown text following this structure:
 
@@ -170,5 +175,4 @@ Format your response as markdown text following this structure:
 [Limited time or availability]
 
 # 12. Final Social Proof
-[Closing testimonials]"""
-) 
+[Closing testimonials]""" 

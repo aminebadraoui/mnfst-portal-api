@@ -2,12 +2,15 @@ from pydantic import BaseModel
 
 
 class StoryAdvertorialDeps(BaseModel):
-    description: str
+    project_description: str
+    product_description: str
 
 
 class InformationalAdvertorialDeps(BaseModel):
-    description: str
+    project_description: str
+    product_description: str
 
 
 class ValueAdvertorialDeps(BaseModel):
-    description: str 
+    project_description: str
+    product_description: str 

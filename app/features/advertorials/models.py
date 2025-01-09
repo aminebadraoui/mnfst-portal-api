@@ -7,7 +7,9 @@ from pydantic import BaseModel
 
 
 class AdvertorialRequest(BaseModel):
-    description: str
+    project_description: str  # JSON dump of project data
+    product_description: str  # JSON dump of product data
+    product_id: uuid.UUID  # For database relationship
 
 
 class AdvertorialSet(BaseModel):

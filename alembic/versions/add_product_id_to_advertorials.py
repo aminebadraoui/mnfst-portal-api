@@ -17,6 +17,17 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
+    # Add product_id to story_based_advertorials
+    op.add_column('story_based_advertorials', 
+                  sa.Column('product_id', postgresql.UUID(as_uuid=True), 
+                           sa.ForeignKey('products.id'),
+                           nullable=True))
+    
+    # Add index for faster lookups
+    op.create_index('ix_story_based_advertorials_product_id',
+                    'story_based_advertorials',
+                    ['product_id'])
+
     # Add product_id to value_based_advertorials
     op.add_column('value_based_advertorials', 
                   sa.Column('product_id', postgresql.UUID(as_uuid=True), 
@@ -41,9 +52,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Remove indexes
+    op.drop_index('ix_story_based_advertorials_product_id')
     op.drop_index('ix_value_based_advertorials_product_id')
     op.drop_index('ix_informational_advertorials_product_id')
     
     # Remove columns
+    op.drop_column('story_based_advertorials', 'product_id')
     op.drop_column('value_based_advertorials', 'product_id')
     op.drop_column('informational_advertorials', 'product_id') 
