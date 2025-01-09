@@ -31,6 +31,11 @@ class User(Base):
     question_analysis = relationship("QuestionAnalysis", back_populates="user", cascade="all, delete-orphan")
     avatar_analysis = relationship("AvatarAnalysis", back_populates="user", cascade="all, delete-orphan")
 
+    # Advertorial relationships
+    story_based_advertorials = relationship("StoryBasedAdvertorial", back_populates="user", cascade="all, delete-orphan")
+    value_based_advertorials = relationship("ValueBasedAdvertorial", back_populates="user", cascade="all, delete-orphan")
+    informational_advertorials = relationship("InformationalAdvertorial", back_populates="user", cascade="all, delete-orphan")
+
 class UserBase(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None

@@ -2,8 +2,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .core.config import settings
-from .routers import auth_router, auth, projects, ai, research_hub_router
+from .routers import auth_router, auth, projects, ai, research_hub_router, advertorials_router
 import logging
+
+# Import all models to ensure they are registered with SQLAlchemy's metadata
+from .models import *
 
 # Configure logging
 logging.basicConfig(
@@ -34,6 +37,7 @@ app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(projects.router, prefix=settings.API_V1_STR)
 app.include_router(ai.router, prefix=settings.API_V1_STR, tags=["AI"])
 app.include_router(research_hub_router, prefix=settings.API_V1_STR, tags=["Research Hub"])
+app.include_router(advertorials_router, prefix=settings.API_V1_STR, tags=["Advertorials"])
 
 # Global exception handler
 @app.exception_handler(Exception)

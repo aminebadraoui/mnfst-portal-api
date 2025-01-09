@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UUID
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from uuid import uuid4
@@ -21,4 +22,9 @@ class Project(Base):
     question_analysis = relationship("QuestionAnalysis", back_populates="project", cascade="all, delete-orphan")
     pattern_analysis = relationship("PatternAnalysis", back_populates="project", cascade="all, delete-orphan")
     product_analysis = relationship("ProductAnalysis", back_populates="project", cascade="all, delete-orphan")
-    avatar_analysis = relationship("AvatarAnalysis", back_populates="project", cascade="all, delete-orphan") 
+    avatar_analysis = relationship("AvatarAnalysis", back_populates="project", cascade="all, delete-orphan")
+
+    # Advertorial relationships
+    story_based_advertorials = relationship("StoryBasedAdvertorial", back_populates="project", cascade="all, delete-orphan")
+    value_based_advertorials = relationship("ValueBasedAdvertorial", back_populates="project", cascade="all, delete-orphan")
+    informational_advertorials = relationship("InformationalAdvertorial", back_populates="project", cascade="all, delete-orphan") 

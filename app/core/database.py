@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import QueuePool
 from .config import settings
 
 # Create async engine
@@ -8,7 +8,9 @@ engine = create_async_engine(
     settings.DATABASE_URL.replace('postgresql://', 'postgresql+asyncpg://'),
     echo=False,
     future=True,
-    poolclass=NullPool  # Disable connection pooling for now
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30
 )
 
 # Create async session factory
