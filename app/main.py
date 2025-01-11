@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .core.logging import setup_logging
-from .routers import auth_router, projects, ai, research_hub_router, advertorials_router, products_router
+from .routers import auth_router, projects, ai, research_hub_router, advertorials_router, products_router, docs
 
 # Setup logging
 setup_logging()
@@ -31,3 +31,4 @@ app.include_router(ai.router, prefix="/api/v1")
 app.include_router(research_hub_router, prefix="/api/v1")
 app.include_router(advertorials_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
+app.include_router(docs.router)

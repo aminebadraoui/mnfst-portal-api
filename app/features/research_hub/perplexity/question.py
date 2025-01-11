@@ -34,19 +34,36 @@ class QuestionPerplexityClient(BasePerplexityClient):
             )
 
             # Make API request
-            content = await self._make_request(prompt)
-            if not content:
+            raw_response = await self._make_request(prompt)
+            if not raw_response:
+                logger.error("No response received from Perplexity API")
                 return {
                     "raw_perplexity_response": "",
                     "structured_data": None
                 }
 
-            # Parse the response
-            parsed_data = await self.parser.parse(content, topic_keyword, user_query)
+            # Log the raw response for debugging
+            logger.debug(f"Raw Perplexity response: {raw_response}")
+
+            # Process the response to structure it better
+            processed_response = self._process_response(raw_response)
             
+            # Parse the processed response
+            parsed_data = await self.parser.parse(processed_response, topic_keyword=topic_keyword, user_query=user_query)
+            
+            # Convert to dict and ensure insights are present
+            result = parsed_data.dict()
+            if not result.get("insights"):
+                logger.warning("No insights found in parsed data")
+                return {
+                    "raw_perplexity_response": raw_response,
+                    "structured_data": {"insights": []}
+                }
+
+            logger.info(f"Successfully parsed {len(result['insights'])} insights")
             return {
-                "raw_perplexity_response": content,
-                "structured_data": parsed_data
+                "raw_perplexity_response": raw_response,
+                "structured_data": result
             }
 
         except Exception as e:
@@ -54,4 +71,51 @@ class QuestionPerplexityClient(BasePerplexityClient):
             return {
                 "raw_perplexity_response": "",
                 "structured_data": None
-            } 
+            }
+
+    def _process_response(self, response: str) -> str:
+        """Process the raw Perplexity response into a structured format string."""
+        try:
+            # Split response into sections based on titles/patterns
+            sections = response.split("\n\n")
+            
+            # Build structured response
+            structured_sections = []
+            current_section = []
+            
+            for section in sections:
+                if not section.strip():
+                    continue
+                
+                # Start a new section when we see a title-like line
+                if section.isupper() or section.startswith("#") or section.startswith("Title:"):
+                    if current_section:
+                        structured_sections.append("\n".join(current_section))
+                    current_section = [section]
+                    continue
+                
+                # Process section based on content
+                lower_section = section.lower()
+                if any(marker in lower_section for marker in [
+                    "question type:", "evidence:", "quote:", 
+                    "solution:", "answer:", "related question",
+                    "engagement:", "metric:"
+                ]):
+                    current_section.append(section)
+            
+            # Add the last section
+            if current_section:
+                structured_sections.append("\n".join(current_section))
+            
+            # Combine all sections with clear separation
+            processed_response = "\n\n---\n\n".join(structured_sections)
+            
+            # If no structured content, return original
+            if not processed_response:
+                return response
+                
+            return processed_response
+            
+        except Exception as e:
+            logger.error(f"Error processing response: {str(e)}", exc_info=True)
+            return response 
