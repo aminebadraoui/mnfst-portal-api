@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # AI settings
     PERPLEXITY_API_KEY: str = "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"
     
+    # Neo4j settings
+    NEO4J_URI: str = Field(default="bolt://localhost:7687")
+    NEO4J_USER: str = Field(default="neo4j")
+    NEO4J_PASSWORD: str = Field(default="mnfst_neo4j_pwd")
+    
+    # Qdrant settings
+    QDRANT_HOST: str = Field(default="157.245.0.147")
+    QDRANT_PORT: int = Field(default=6333)
+    QDRANT_API_KEY: Optional[str] = Field(default=None)
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

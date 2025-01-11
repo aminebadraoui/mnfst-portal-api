@@ -1,8 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.project_graph import get_project_graph_service, ProjectGraphService
+from app.core.project_vector import get_project_vector_service, ProjectVectorService
 from app.models.user import User
 from app.models.project import Project
 from uuid import UUID
@@ -14,13 +16,30 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 async def create_project(
     project: ProjectCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    graph_service: ProjectGraphService = Depends(get_project_graph_service),
+    vector_service: ProjectVectorService = Depends(get_project_vector_service)
 ):
-    db_project = Project(**project.model_dump(), user_id=current_user.id)
-    db.add(db_project)
-    await db.commit()
-    await db.refresh(db_project)
-    return db_project
+    try:
+        # 1. Create in PostgreSQL
+        db_project = Project(**project.model_dump(), user_id=current_user.id)
+        db.add(db_project)
+        await db.commit()
+        await db.refresh(db_project)
+        
+        # 2. Create in Neo4j
+        await graph_service.create_project(db_project.__dict__)
+        
+        # 3. Create vector embeddings in Qdrant
+        await vector_service.create_project_vectors(db_project.__dict__)
+        
+        return db_project
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 @router.get("", response_model=List[ProjectResponse])
 async def get_projects(
@@ -36,7 +55,8 @@ async def get_projects(
 async def get_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    graph_service: ProjectGraphService = Depends(get_project_graph_service)
 ):
     query = await db.execute(
         Project.__table__.select()
@@ -56,7 +76,8 @@ async def update_project(
     project_id: UUID,
     project_update: ProjectUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    graph_service: ProjectGraphService = Depends(get_project_graph_service)
 ):
     query = await db.execute(
         Project.__table__.select()
@@ -89,7 +110,8 @@ async def update_project(
 async def delete_project(
     project_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    graph_service: ProjectGraphService = Depends(get_project_graph_service)
 ):
     query = await db.execute(
         Project.__table__.select()
@@ -103,8 +125,19 @@ async def delete_project(
             detail="Project not found"
         )
     
-    await db.execute(
-        Project.__table__.delete().where(Project.id == project_id)
-    )
-    await db.commit()
+    try:
+        # Delete from Neo4j first
+        await graph_service.delete_project(str(project_id))
+        
+        # Then delete from PostgreSQL
+        await db.execute(
+            Project.__table__.delete().where(Project.id == project_id)
+        )
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
     return None 

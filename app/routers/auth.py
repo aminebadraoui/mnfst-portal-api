@@ -9,6 +9,8 @@ from ..core.database import get_db
 from ..models.user import User
 from sqlalchemy import select
 import logging
+from ..core.user_graph import get_user_graph_service, UserGraphService
+from ..core.user_vector import get_user_vector_service, UserVectorService
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -81,7 +83,9 @@ async def login(
 @router.post("/register")
 async def register(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    graph_service: UserGraphService = Depends(get_user_graph_service),
+    vector_service: UserVectorService = Depends(get_user_vector_service)
 ):
     # Check if user exists
     query = select(User).where(User.email == form_data.username)
@@ -94,30 +98,43 @@ async def register(
             detail="Email already registered"
         )
     
-    # Create new user
-    hashed_password = get_password_hash(form_data.password)
-    new_user = User(
-        email=form_data.username,
-        hashed_password=hashed_password
-    )
-    
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-    
-    # Create access token
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": new_user.email}, expires_delta=access_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": str(new_user.id),
-            "email": new_user.email,
-            "first_name": new_user.first_name,
-            "last_name": new_user.last_name
+    try:
+        # Create new user in PostgreSQL
+        hashed_password = get_password_hash(form_data.password)
+        new_user = User(
+            email=form_data.username,
+            hashed_password=hashed_password
+        )
+        
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        
+        # Create user node in Neo4j
+        await graph_service.create_user(new_user.__dict__)
+        
+        # Create user vectors in Qdrant
+        await vector_service.create_user_vectors(new_user.__dict__)
+        
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": new_user.email}, expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": str(new_user.id),
+                "email": new_user.email,
+                "first_name": new_user.first_name,
+                "last_name": new_user.last_name
+            }
         }
-    } 
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        ) 
