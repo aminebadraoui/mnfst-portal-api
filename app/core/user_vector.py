@@ -5,6 +5,7 @@ from qdrant_client.http import models as rest
 from .config import settings
 from datetime import datetime
 from uuid import UUID, uuid4
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,15 @@ class UserVectorService:
     def __init__(self, client: QdrantClient):
         self.client = client
         self.collection_name = "users"
+        self._model = None  # Lazy load the model
         
+    @property
+    def model(self) -> SentenceTransformer:
+        if self._model is None:
+            # Using all-MiniLM-L6-v2 as it's a good balance of speed and quality
+            self._model = SentenceTransformer('all-MiniLM-L6-v2')
+        return self._model
+
     async def ensure_collection(self):
         collections = self.client.get_collections().collections
         if not any(c.name == self.collection_name for c in collections):
@@ -104,8 +113,21 @@ class UserVectorService:
         )
 
     async def generate_embedding(self, text: str) -> List[float]:
-        # TODO: Implement actual embedding generation
-        return [0.0] * 384  # Placeholder
+        """Generate embeddings using the SentenceTransformer model.
+        
+        Args:
+            text: The text to generate embeddings for
+            
+        Returns:
+            A list of floats representing the text embedding
+        """
+        try:
+            # Convert the embedding to a list of floats
+            embedding = self.model.encode(text, convert_to_tensor=False)
+            return embedding.tolist()
+        except Exception as e:
+            logger.error(f"Error generating embedding: {str(e)}")
+            raise
 
 # Dependency to get user vector service
 async def get_user_vector_service():

@@ -1,33 +1,29 @@
 from pydantic import BaseModel
 from typing import Optional
-from decimal import Decimal
 from uuid import UUID
+from datetime import datetime
 
-class ProductCreate(BaseModel):
+class ProductBase(BaseModel):
     name: str
     description: str
     features_and_benefits: str
     guarantee: Optional[str] = None
-    price: Optional[Decimal] = None
-    is_service: bool = False
+    price: Optional[str] = None
+    is_service: Optional[bool] = False
 
-class ProductUpdate(BaseModel):
+class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(ProductBase):
     name: Optional[str] = None
     description: Optional[str] = None
     features_and_benefits: Optional[str] = None
-    guarantee: Optional[str] = None
-    price: Optional[Decimal] = None
-    is_service: Optional[bool] = None
 
-class ProductResponse(BaseModel):
+class ProductResponse(ProductBase):
     id: UUID
-    name: str
-    description: str
-    features_and_benefits: str
-    guarantee: Optional[str]
-    price: Optional[Decimal]
-    is_service: bool
     project_id: UUID
+    user_id: UUID
+    created_at: datetime
 
     class Config:
         from_attributes = True 

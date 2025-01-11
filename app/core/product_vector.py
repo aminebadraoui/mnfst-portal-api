@@ -9,10 +9,10 @@ from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
-class ProjectVectorService:
+class ProductVectorService:
     def __init__(self, client: QdrantClient):
         self.client = client
-        self.collection_name = "projects"
+        self.collection_name = "products"
         self._model = None  # Lazy load the model
         
     @property
@@ -29,7 +29,7 @@ class ProjectVectorService:
                 collection_name=self.collection_name,
                 vectors_config={
                     "text": models.VectorParams(
-                        size=384,
+                        size=384,  # MiniLM-L6-v2 produces 384-dimensional embeddings
                         distance=models.Distance.COSINE
                     )
                 }
@@ -45,42 +45,67 @@ class ProjectVectorService:
                 field_name="project_id",  # Project scope
                 field_schema=models.PayloadSchemaType.KEYWORD
             )
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="product_id",  # Product scope
+                field_schema=models.PayloadSchemaType.KEYWORD
+            )
 
-    async def create_project_vectors(self, project_data: dict):
+    async def create_product_vectors(self, product_data: dict):
         await self.ensure_collection()
         
         # Ensure UUIDs are converted to strings properly
-        project_id = str(UUID(project_data["id"]) if isinstance(project_data["id"], str) else project_data["id"])
-        user_id = str(UUID(project_data["user_id"]) if isinstance(project_data["user_id"], str) else project_data["user_id"])
+        product_id = str(UUID(product_data["id"]) if isinstance(product_data["id"], str) else product_data["id"])
+        project_id = str(UUID(product_data["project_id"]) if isinstance(product_data["project_id"], str) else product_data["project_id"])
+        user_id = str(UUID(product_data["user_id"]) if isinstance(product_data["user_id"], str) else product_data["user_id"])
         points = []
         
         # Name embedding
-        if "name" in project_data:
-            name_vector = await self.generate_embedding(project_data["name"])
+        if "name" in product_data:
+            name_vector = await self.generate_embedding(product_data["name"])
             points.append(models.PointStruct(
                 id=str(uuid4()),
                 vector={"text": name_vector},
                 payload={
-                    "user_id": user_id,  # Tenant identifier
+                    "user_id": user_id,  # Primary tenant identifier
                     "project_id": project_id,
-                    "content": project_data["name"],
+                    "product_id": product_id,
+                    "content": product_data["name"],
                     "field_type": "name",
-                    "created_at": str(project_data.get("created_at", datetime.now()))
+                    "created_at": str(product_data.get("created_at", datetime.now()))
                 }
             ))
         
         # Description embedding
-        if "description" in project_data:
-            desc_vector = await self.generate_embedding(project_data["description"])
+        if "description" in product_data:
+            desc_vector = await self.generate_embedding(product_data["description"])
             points.append(models.PointStruct(
                 id=str(uuid4()),
                 vector={"text": desc_vector},
                 payload={
-                    "user_id": user_id,  # Tenant identifier
+                    "user_id": user_id,  # Primary tenant identifier
                     "project_id": project_id,
-                    "content": project_data["description"],
+                    "product_id": product_id,
+                    "content": product_data["description"],
                     "field_type": "description",
-                    "created_at": str(project_data.get("created_at", datetime.now()))
+                    "created_at": str(product_data.get("created_at", datetime.now()))
+                }
+            ))
+        
+        # Features and benefits embedding
+        if "features_and_benefits" in product_data:
+            features_text = str(product_data["features_and_benefits"])
+            features_vector = await self.generate_embedding(features_text)
+            points.append(models.PointStruct(
+                id=str(uuid4()),
+                vector={"text": features_vector},
+                payload={
+                    "user_id": user_id,  # Primary tenant identifier
+                    "project_id": project_id,
+                    "product_id": product_id,
+                    "content": features_text,
+                    "field_type": "features_and_benefits",
+                    "created_at": str(product_data.get("created_at", datetime.now()))
                 }
             ))
         
@@ -90,48 +115,61 @@ class ProjectVectorService:
                 points=points
             )
 
-    async def search_projects(
+    async def search_products(
         self, 
         query: str, 
         user_id: str,  # Required tenant identifier
+        project_id: Optional[str] = None,
         limit: int = 10
     ):
         # Ensure UUID is converted to string properly
         user_id = str(UUID(user_id) if isinstance(user_id, str) else user_id)
+        if project_id:
+            project_id = str(UUID(project_id) if isinstance(project_id, str) else project_id)
         
         query_vector = await self.generate_embedding(query)
         
-        # Always filter by user_id for tenant isolation
+        # Build filter conditions
+        must_conditions = [
+            models.FieldCondition(
+                key="user_id",
+                match=models.MatchValue(value=user_id)
+            )
+        ]
+        
+        if project_id:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="project_id",
+                    match=models.MatchValue(value=project_id)
+                )
+            )
+        
         search_result = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
             limit=limit,
             query_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="user_id",
-                        match=models.MatchValue(value=user_id)
-                    )
-                ]
+                must=must_conditions
             )
         )
         
         return search_result
 
-    async def delete_project_vectors(self, project_id: str, user_id: str):
+    async def delete_product_vectors(self, product_id: str, user_id: str):
         # Ensure UUIDs are converted to strings properly
-        project_id = str(UUID(project_id) if isinstance(project_id, str) else project_id)
+        product_id = str(UUID(product_id) if isinstance(product_id, str) else product_id)
         user_id = str(UUID(user_id) if isinstance(user_id, str) else user_id)
         
-        # Delete all vectors for this project, ensuring tenant isolation
+        # Delete all vectors for this product, ensuring tenant isolation
         self.client.delete(
             collection_name=self.collection_name,
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[
                         models.FieldCondition(
-                            key="project_id",
-                            match=models.MatchValue(value=project_id)
+                            key="product_id",
+                            match=models.MatchValue(value=product_id)
                         ),
                         models.FieldCondition(
                             key="user_id",
@@ -142,14 +180,14 @@ class ProjectVectorService:
             )
         )
 
-    async def update_project_vectors(self, project_data: dict):
+    async def update_product_vectors(self, product_data: dict):
         # First delete existing vectors (with tenant isolation)
-        await self.delete_project_vectors(
-            str(project_data["id"]), 
-            str(project_data["user_id"])
+        await self.delete_product_vectors(
+            str(product_data["id"]), 
+            str(product_data["user_id"])
         )
         # Then create new vectors
-        await self.create_project_vectors(project_data)
+        await self.create_product_vectors(product_data)
 
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embeddings using the SentenceTransformer model.
@@ -168,9 +206,9 @@ class ProjectVectorService:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
 
-# Dependency to get project vector service
-async def get_project_vector_service():
-    """Dependency that provides a project vector service instance."""
+# Dependency to get product vector service
+async def get_product_vector_service():
+    """Dependency that provides a product vector service instance."""
     # Remove any protocol prefix from the host
     host = settings.QDRANT_HOST.replace("http://", "").replace("https://", "")
     client = QdrantClient(
@@ -180,5 +218,5 @@ async def get_project_vector_service():
         prefer_grpc=False,
         https=False  # Disable SSL for local development
     )
-    service = ProjectVectorService(client=client)
+    service = ProductVectorService(client=client)
     return service 
